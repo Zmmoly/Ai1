@@ -22,6 +22,12 @@ android {
         }
     }
 
+    // إضافة هذا الجزء ضروري جداً لضمان قراءة الموديل من الـ Assets
+    @Suppress("UnstableApiUsage")
+    androidResources {
+        noCompress += "tflite"
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file("debug.keystore")
@@ -65,7 +71,7 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.activity:activity-ktx:1.8.2")
     
+    // تم الإبقاء على المكتبات الأساسية وحذف select-tf-ops لتوفير المساحة
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0")
 }
