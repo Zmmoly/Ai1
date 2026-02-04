@@ -78,6 +78,22 @@ class SpeechRecognizer(private val context: Context) {
             Log.d(TAG, "🔧 إنشاء Interpreter...")
             interpreter = Interpreter(modelBuffer, options)
             
+            // طباعة معلومات مفصلة عن النموذج
+            val inputDetails = interpreter?.getInputTensor(0)
+            val outputDetails = interpreter?.getOutputTensor(0)
+            
+            Log.d(TAG, "╔════════════════════════════════════════╗")
+            Log.d(TAG, "║ معلومات النموذج                       ║")
+            Log.d(TAG, "╠════════════════════════════════════════╣")
+            Log.d(TAG, "║ 📥 Input:                              ║")
+            Log.d(TAG, "║   Shape: ${inputDetails?.shape()?.contentToString()}")
+            Log.d(TAG, "║   Type: ${inputDetails?.dataType()}")
+            Log.d(TAG, "║                                        ║")
+            Log.d(TAG, "║ 📤 Output:                             ║")
+            Log.d(TAG, "║   Shape: ${outputDetails?.shape()?.contentToString()}")
+            Log.d(TAG, "║   Type: ${outputDetails?.dataType()}")
+            Log.d(TAG, "╚════════════════════════════════════════╝")
+            
             Log.d(TAG, "✅ تم تحميل النموذج: ${file.name}")
             listener?.onModelLoaded(file.name)
             true
@@ -302,35 +318,58 @@ class SpeechRecognizer(private val context: Context) {
             // 3. تحويل لـ ByteBuffer
             val inputBuffer = createInputBuffer(features)
             
-            // 4. تحضير المخرجات
+            // 4. فحص شكل المخرجات
             val outputDetails = interpreter?.getOutputTensor(0)
             val outputShape = outputDetails?.shape()
             
-            if (outputShape == null || outputShape.size < 3) {
-                Log.e(TAG, "❌ شكل المخرجات غير صحيح")
+            if (outputShape == null || outputShape.isEmpty()) {
+                Log.e(TAG, "❌ شكل المخرجات null أو فارغ")
                 return ""
             }
             
-            // المخرج: [batch, time, vocab_size]
-            val batchSize = outputShape[0]
-            val timeSteps = outputShape[1]
-            val vocabSize = outputShape[2]
+            // طباعة الشكل للتشخيص
+            Log.d(TAG, "📊 Output shape: ${outputShape.contentToString()}")
             
-            // تحضير مصفوفة المخرجات
-            val outputArray = Array(batchSize) { Array(timeSteps) { FloatArray(vocabSize) } }
+            // 5. تشغيل النموذج حسب شكل المخرجات
+            val text = when (outputShape.size) {
+                1 -> {
+                    // شكل: [total_elements]
+                    val outputArray = IntArray(outputShape[0])
+                    interpreter?.run(inputBuffer, outputArray)
+                    decodeIndicesArray(outputArray)
+                }
+                2 -> {
+                    // شكل: [time, vocab] أو [batch*time, vocab]
+                    val timeSteps = outputShape[0]
+                    val vocabSize = outputShape[1]
+                    val outputArray = Array(timeSteps) { FloatArray(vocabSize) }
+                    interpreter?.run(inputBuffer, outputArray)
+                    ctcDecodeGreedy(outputArray)
+                }
+                3 -> {
+                    // شكل: [batch, time, vocab]
+                    val batchSize = outputShape[0]
+                    val timeSteps = outputShape[1]
+                    val vocabSize = outputShape[2]
+                    val outputArray = Array(batchSize) { Array(timeSteps) { FloatArray(vocabSize) } }
+                    interpreter?.run(inputBuffer, outputArray)
+                    ctcDecodeGreedy(outputArray[0])
+                }
+                else -> {
+                    Log.e(TAG, "❌ شكل مخرجات غير مدعوم: ${outputShape.size} أبعاد")
+                    ""
+                }
+            }
             
-            // 5. تشغيل النموذج
-            interpreter?.run(inputBuffer, outputArray)
-            
-            // 6. فك التشفير - CTC Decode مثل Python
-            val text = ctcDecodeGreedy(outputArray[0])
-            
-            Log.d(TAG, "📝 Decoded text: $text")
+            if (text.isNotBlank()) {
+                Log.d(TAG, "📝 Decoded text: $text")
+            }
             
             return text
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ خطأ في التعرف: ${e.message}", e)
+            e.printStackTrace()
             return ""
         }
     }
@@ -468,6 +507,30 @@ class SpeechRecognizer(private val context: Context) {
             }
             
             lastChar = maxIdx
+        }
+        
+        return result.toString().trim()
+    }
+    
+    /**
+     * فك التشفير من مصفوفة indices مباشرة
+     * (للنماذج التي تُرجع indices بدلاً من logits)
+     */
+    private fun decodeIndicesArray(indices: IntArray): String {
+        val vocabulary = loadVocabulary()
+        val blankIndex = vocabulary.size
+        
+        val result = StringBuilder()
+        var lastChar = -1
+        
+        for (idx in indices) {
+            // CTC rules: حذف المكرر وحذف الـ blank
+            if (idx != lastChar && idx != blankIndex) {
+                if (idx >= 0 && idx < vocabulary.size) {
+                    result.append(vocabulary[idx])
+                }
+            }
+            lastChar = idx
         }
         
         return result.toString().trim()
