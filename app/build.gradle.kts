@@ -55,7 +55,7 @@ android {
     
     buildFeatures {
         viewBinding = true
-        mlModelBinding = true // مهم جداً للتعامل مع ملفات .tflite بسهولة
+        mlModelBinding = true
     }
 }
 
@@ -71,4 +71,11 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
     implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0")
+
+    // OkHttp - للاتصال بـ Deepgram عبر WebSocket
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Kotlin Coroutines - للتسجيل الصوتي غير المتزامن
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
+```
