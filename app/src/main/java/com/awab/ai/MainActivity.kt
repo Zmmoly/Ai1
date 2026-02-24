@@ -1,9 +1,13 @@
 package com.awab.ai
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -21,20 +25,59 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private lateinit var rootLayout: LinearLayout
     private lateinit var commandHandler: CommandHandler
-    private lateinit var speechRecognizer: SpeechRecognizer
     private lateinit var memoryManager: MemoryManager
     private lateinit var micButton: TextView
 
     private var isRecording = false
     private val RECORD_AUDIO_PERMISSION_CODE = 200
 
+    // مستقبل البث من الخدمة الخلفية
+    private val recordingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                AudioRecordingService.ACTION_TEXT_RECOGNIZED -> {
+                    val text = intent.getStringExtra(AudioRecordingService.EXTRA_TEXT)
+                    val error = intent.getStringExtra(AudioRecordingService.EXTRA_ERROR)
+                    if (text != null) {
+                        val current = inputField.text.toString()
+                        val newText = if (current.isBlank()) text else "$current $text"
+                        inputField.setText(newText)
+                        inputField.setSelection(newText.length)
+                        Toast.makeText(this@MainActivity, "✅ $text", Toast.LENGTH_SHORT).show()
+                    } else if (error != null) {
+                        Toast.makeText(this@MainActivity, "❌ $error", Toast.LENGTH_SHORT).show()
+                        stopRecordingUI()
+                    }
+                }
+                AudioRecordingService.ACTION_RECORDING_STARTED -> runOnUiThread { startRecordingUI() }
+                AudioRecordingService.ACTION_RECORDING_STOPPED -> runOnUiThread { stopRecordingUI() }
+                AudioRecordingService.ACTION_VOLUME_CHANGED -> {
+                    val volume = intent.getFloatExtra(AudioRecordingService.EXTRA_VOLUME, 0f)
+                    runOnUiThread { micButton.alpha = (0.5f + volume * 0.5f).coerceIn(0.5f, 1f) }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         commandHandler = CommandHandler(this)
-        speechRecognizer = SpeechRecognizer(this)
         memoryManager = MemoryManager(this)
-        setupSpeechRecognizer()
+
+        // تسجيل مستقبل البث
+        val filter = IntentFilter().apply {
+            addAction(AudioRecordingService.ACTION_TEXT_RECOGNIZED)
+            addAction(AudioRecordingService.ACTION_RECORDING_STARTED)
+            addAction(AudioRecordingService.ACTION_RECORDING_STOPPED)
+            addAction(AudioRecordingService.ACTION_VOLUME_CHANGED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(recordingReceiver, filter, RECEIVER_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(recordingReceiver, filter)
+        }
 
         supportActionBar?.hide()
 
@@ -351,53 +394,42 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent(this, SettingsActivity::class.java))
     }
 
-    // ========== Speech Recognition ==========
-
-    private fun setupSpeechRecognizer() {
-        speechRecognizer.setListener(object : SpeechRecognizer.RecognitionListener {
-            override fun onTextRecognized(text: String) {
-                runOnUiThread {
-                    val current = inputField.text.toString()
-                    val newText = if (current.isBlank()) text else "$current $text"
-                    inputField.setText(newText)
-                    inputField.setSelection(newText.length)
-                    Toast.makeText(this@MainActivity, "✅ تم التعرف: $text", Toast.LENGTH_SHORT).show()
-                }
-            }
-            override fun onError(error: String) {
-                runOnUiThread {
-                    Toast.makeText(this@MainActivity, "❌ $error", Toast.LENGTH_SHORT).show()
-                    stopRecordingUI()
-                }
-            }
-            override fun onRecordingStarted() { runOnUiThread { startRecordingUI() } }
-            override fun onRecordingStopped() { runOnUiThread { stopRecordingUI() } }
-            override fun onVolumeChanged(volume: Float) {
-                runOnUiThread { micButton.alpha = (0.5f + volume * 0.5f).coerceIn(0.5f, 1f) }
-            }
-            override fun onModelLoaded(modelName: String) {}
-        })
-    }
+    // ============================
+    // إدارة التسجيل عبر الخدمة الخلفية
+    // ============================
 
     private fun toggleRecording() {
-        if (isRecording) stopRecording() else startRecording()
+        if (isRecording) stopRecordingService() else startRecordingService()
     }
 
-    private fun startRecording() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), RECORD_AUDIO_PERMISSION_CODE)
+    private fun startRecordingService() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.RECORD_AUDIO), RECORD_AUDIO_PERMISSION_CODE)
             return
         }
-        speechRecognizer.startRecording()
+        val intent = Intent(this, AudioRecordingService::class.java).apply {
+            action = AudioRecordingService.ACTION_START
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
-    private fun stopRecording() { speechRecognizer.stopRecording() }
+    private fun stopRecordingService() {
+        startService(Intent(this, AudioRecordingService::class.java).apply {
+            action = AudioRecordingService.ACTION_STOP
+        })
+    }
 
     private fun startRecordingUI() {
         isRecording = true
         micButton.text = "⏹️"
         micButton.setTextColor(0xFFDC3545.toInt())
-        inputField.hint = "🎤 جاري التسجيل..."
+        inputField.hint = "🎤 يستمع في الخلفية..."
     }
 
     private fun stopRecordingUI() {
@@ -410,13 +442,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == RECORD_AUDIO_PERMISSION_CODE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startRecording()
+        if (requestCode == RECORD_AUDIO_PERMISSION_CODE && grantResults.isNotEmpty()
+            && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startRecordingService()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        speechRecognizer.cleanup()
+        try { unregisterReceiver(recordingReceiver) } catch (e: Exception) { /* تجاهل */ }
+        // الخدمة تبقى تعمل في الخلفية حتى يضغط المستخدم إيقاف
     }
 }
