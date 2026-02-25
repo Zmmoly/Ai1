@@ -1,144 +1,199 @@
 package com.awab.ai
 
 /**
- * ===================================================
- *  محرك الخطوات — StepEngine
- * ===================================================
+ * =====================================================
+ *  StepEngine v2 — محرك خطوات بلا حدود
+ * =====================================================
  *
- *  يدعم ثلاثة أنواع من الخطوات داخل الأوامر المخصصة:
+ *  الخطوة هي شجرة (Tree) وليس نصاً مسطحاً.
+ *  كل خطوة يمكن أن تكون:
  *
- *  1. خطوة عادية  ← أي أمر من CommandHandler
- *     مثال:  افتح واتساب
+ *  ① Normal   → أمر عادي
+ *  ② IfChain  → سلسلة إذا / وإلا إذا / وإلا (بلا حدود)
+ *  ③ Loop     → حلقة تكرار (جسمها قائمة Steps)
  *
- *  2. شرط  ← إذا [شرط]: [أمر_صح] وإلا: [أمر_خطأ]
- *     مثال:  إذا الشاشة تحتوي "إرسال": اضغط على إرسال وإلا: رجوع
- *     (جزء "وإلا" اختياري)
+ *  الفاصل بين الفروع:    |
+ *  الفاصل شرط → أمر:     →  أو  :
  *
- *  3. حلقة  ← كرر [N] مرات: [أمر]
- *     مثال:  كرر 3 مرات: على الصوت
- *     أو     كرر 5 مرات: سكرين شوت
- *
- * ===================================================
+ *  أمثلة:
+ *  إذا A → x1 | وإلا إذا B → x2 | وإلا إذا C → x3 | وإلا → xN
+ *  كرر 5 مرات → إذا A → x1 | وإلا → x2
+ *  إذا A و B → x1 | وإلا إذا A أو C → x2 | وإلا → x3
+ * =====================================================
  */
 
+// ===== نموذج البيانات =====
+
 sealed class Step {
-    /** خطوة عادية */
     data class Normal(val command: String) : Step()
 
-    /** شرط: إذا [condition] → [onTrue]  (وإلا → [onFalse]) */
-    data class Condition(
-        val condition: String,
-        val onTrue: String,
-        val onFalse: String?
-    ) : Step()
+    data class IfChain(
+        val branches: List<Branch>,
+        val elseBranch: List<Step>?
+    ) : Step() {
+        data class Branch(val condition: String, val steps: List<Step>)
+    }
 
-    /** حلقة: كرر [times] مرات → [command] */
-    data class Loop(
-        val times: Int,
-        val command: String
-    ) : Step()
+    data class Loop(val times: Int, val body: List<Step>) : Step()
 }
+
+// ===== المحرك =====
 
 object StepEngine {
 
-    // ===== تحليل نص الخطوة =====
+    // ─── تحليل نص الخطوة ───────────────────
 
     fun parse(raw: String): Step {
-        val trimmed = raw.trim()
+        val t = raw.trim()
 
-        // --- شرط ---
-        // صيغ: "إذا X: Y وإلا: Z"  أو  "إذا X: Y"
-        val conditionRegex = Regex(
-            "^(?:إذا|اذا|لو)\\s+(.+?)\\s*:\\s*(.+?)(?:\\s+وإلا\\s*:\\s*(.+))?$",
-            RegexOption.IGNORE_CASE
-        )
-        conditionRegex.matchEntire(trimmed)?.let { m ->
-            return Step.Condition(
-                condition = m.groupValues[1].trim(),
-                onTrue    = m.groupValues[2].trim(),
-                onFalse   = m.groupValues[3].trim().takeIf { it.isNotBlank() }
-            )
+        // حلقة: "كرر N مرات → ..."
+        Regex(
+            "^(?:كرر|تكرار)\\s+(\\d+)\\s*(?:مرات?|مره)?\\s*(?:→|->|:)\\s*(.+)$",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        ).matchEntire(t)?.let { m ->
+            val times = m.groupValues[1].toIntOrNull()?.coerceIn(1, 100) ?: 1
+            return Step.Loop(times, listOf(parse(m.groupValues[2].trim())))
         }
 
-        // --- حلقة ---
-        // صيغ: "كرر 3 مرات: على الصوت"  أو  "كرر 3: على الصوت"
-        val loopRegex = Regex(
-            "^(?:كرر|تكرار)\\s+(\\d+)\\s*(?:مرات?|مره)?\\s*:\\s*(.+)$",
-            RegexOption.IGNORE_CASE
-        )
-        loopRegex.matchEntire(trimmed)?.let { m ->
-            val times = m.groupValues[1].toIntOrNull()?.coerceIn(1, 50) ?: 1
-            return Step.Loop(times = times, command = m.groupValues[2].trim())
+        // شرط
+        if (t.startsWith("إذا") || t.startsWith("اذا") || t.startsWith("لو ")) {
+            return parseIfChain(t)
         }
 
-        // --- خطوة عادية ---
-        return Step.Normal(trimmed)
+        return Step.Normal(t)
     }
 
-    // ===== تقييم الشروط =====
+    private fun parseIfChain(raw: String): Step {
+        val segments = splitOnPipe(raw)
+        val branches = mutableListOf<Step.IfChain.Branch>()
+        var elseBranch: List<Step>? = null
 
-    /**
-     * يقيّم الشرط بناءً على حالة الشاشة الحالية (عبر Accessibility)
-     * الشروط المدعومة:
-     *   - "الشاشة تحتوي X"   → يتحقق إذا كانت الشاشة تحتوي على نص X
-     *   - "الشاشة لا تحتوي X"
-     *   - "دائماً" / "صح"    → دائماً صحيح
-     *   - "خطأ" / "أبداً"    → دائماً خطأ
-     */
+        for (seg in segments) {
+            val s = seg.trim()
+
+            // "وإلا → X" بدون شرط
+            Regex(
+                "^(?:وإلا|والا|else)\\s*(?:→|->|:)\\s*(.+)$",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).matchEntire(s)?.let { m ->
+                elseBranch = listOf(parse(m.groupValues[1].trim()))
+                return@let
+            }
+            if (elseBranch != null) continue
+
+            // "إذا X → Y"  أو  "وإلا إذا X → Y"
+            Regex(
+                "^(?:(?:وإلا|والا|else)\\s+)?(?:إذا|اذا|لو|if)\\s+(.+?)\\s*(?:→|->|:)\\s*(.+)$",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).matchEntire(s)?.let { m ->
+                branches.add(
+                    Step.IfChain.Branch(
+                        condition = m.groupValues[1].trim(),
+                        steps = listOf(parse(m.groupValues[2].trim()))
+                    )
+                )
+            }
+        }
+
+        return Step.IfChain(branches, elseBranch)
+    }
+
+    /** تقسيم على | مع مراعاة الأقواس */
+    private fun splitOnPipe(text: String): List<String> {
+        val parts = mutableListOf<String>()
+        var depth = 0
+        val cur = StringBuilder()
+        for (ch in text) {
+            when (ch) {
+                '(', '[', '{' -> { depth++; cur.append(ch) }
+                ')', ']', '}' -> { depth--; cur.append(ch) }
+                '|' -> if (depth == 0) { parts.add(cur.toString()); cur.clear() }
+                     else cur.append(ch)
+                else -> cur.append(ch)
+            }
+        }
+        if (cur.isNotBlank()) parts.add(cur.toString())
+        return parts
+    }
+
+    // ─── تقييم الشروط ──────────────────────
+
     fun evaluateCondition(condition: String): Boolean {
         val lower = condition.lowercase().trim()
 
-        if (lower == "دائماً" || lower == "دائما" || lower == "صح" || lower == "true") return true
-        if (lower == "خطأ" || lower == "خطا" || lower == "أبداً" || lower == "false") return false
+        if (lower in listOf("دائماً","دائما","صح","true","نعم","yes")) return true
+        if (lower in listOf("خطأ","خطا","أبداً","false","لا","no"))   return false
+
+        // AND: "... و ..."
+        if (lower.contains(" و ") && !lower.startsWith("الشاشة")) {
+            return lower.split(" و ").all { evaluateCondition(it.trim()) }
+        }
+        // OR: "... أو ..."
+        if (lower.contains(" أو ")) {
+            return lower.split(" أو ").any { evaluateCondition(it.trim()) }
+        }
 
         val service = MyAccessibilityService.getInstance() ?: return false
         val screenText = service.getScreenText().lowercase()
 
-        // "الشاشة تحتوي X"
-        val containsPositive = Regex("(?:الشاشة\\s+)?(?:تحتوي|يوجد|موجود)\\s+(?:على\\s+)?[\"']?(.+?)[\"']?$")
-        containsPositive.find(lower)?.let {
-            val keyword = it.groupValues[1].trim()
-            return screenText.contains(keyword)
-        }
+        // "تحتوي X" / "يوجد X" / "موجود X"
+        Regex("(?:الشاشة\\s+)?(?:تحتوي|يوجد|موجود)\\s+(?:على\\s+)?[\"']?(.+?)[\"']?$")
+            .find(lower)?.let { return screenText.contains(it.groupValues[1].trim()) }
 
-        // "الشاشة لا تحتوي X"
-        val containsNegative = Regex("(?:الشاشة\\s+)?(?:لا\\s+تحتوي|لا\\s+يوجد|غير\\s+موجود)\\s+(?:على\\s+)?[\"']?(.+?)[\"']?$")
-        containsNegative.find(lower)?.let {
-            val keyword = it.groupValues[1].trim()
-            return !screenText.contains(keyword)
-        }
+        // "لا تحتوي X" / "لا يوجد X" / "غير موجود X"
+        Regex("(?:الشاشة\\s+)?(?:لا\\s+تحتوي|لا\\s+يوجد|غير\\s+موجود)\\s+(?:على\\s+)?[\"']?(.+?)[\"']?$")
+            .find(lower)?.let { return !screenText.contains(it.groupValues[1].trim()) }
 
-        // fallback: اعتبر النص كـ keyword وابحث عنه في الشاشة
+        // fallback: ابحث مباشرة
         return screenText.contains(lower)
     }
 
-    // ===== توليد وصف مقروء للمعاينة =====
+    // ─── وصف مقروء ─────────────────────────
 
-    fun describe(step: Step): String = when (step) {
-        is Step.Normal    -> step.command
-        is Step.Condition -> buildString {
-            append("🔀 إذا [${step.condition}]:\n")
-            append("     ✅ ${step.onTrue}")
-            step.onFalse?.let { append("\n     ❌ وإلا: $it") }
-        }
-        is Step.Loop      -> "🔁 كرر ${step.times} مرات: ${step.command}"
+    fun describe(step: Step, indent: String = ""): String = when (step) {
+        is Step.Normal -> "$indent▶ ${step.command}"
+
+        is Step.IfChain -> buildString {
+            step.branches.forEachIndexed { i, b ->
+                val kw = if (i == 0) "🔀 إذا" else "↪ وإلا إذا"
+                appendLine("$indent$kw [${b.condition}]")
+                b.steps.forEach { appendLine(describe(it, "$indent    ")) }
+            }
+            step.elseBranch?.let { els ->
+                appendLine("$indent↩ وإلا")
+                els.forEach { appendLine(describe(it, "$indent    ")) }
+            }
+        }.trimEnd()
+
+        is Step.Loop -> buildString {
+            appendLine("$indent🔁 كرر ${step.times} مرات:")
+            step.body.forEach { appendLine(describe(it, "$indent    ")) }
+        }.trimEnd()
     }
 
-    // ===== تلميحات الصيغ للمستخدم =====
+    // ─── تلميحات الصيغ ─────────────────────
 
     val SYNTAX_HINTS = """
-🔵 خطوة عادية:
+▶ خطوة عادية:
   افتح واتساب
-  سكرين شوت
 
-🔀 شرط (إذا / وإلا):
-  إذا الشاشة تحتوي إرسال: اضغط على إرسال وإلا: رجوع
-  إذا الشاشة لا تحتوي قبول: رجوع
-  لو موجود "تأكيد": اضغط على تأكيد
+🔀 شرط بسيط:
+  إذا الشاشة تحتوي إرسال → اضغط على إرسال
 
-🔁 حلقة (كرر):
-  كرر 3 مرات: على الصوت
-  كرر 5 مرات: سكرين شوت
-  كرر 2: رجوع
+🔀 شرط مع وإلا:
+  إذا الشاشة تحتوي إرسال → اضغط على إرسال | وإلا → رجوع
+
+🔀 سلسلة شروط بلا حدود:
+  إذا تحتوي A → أمر1 | وإلا إذا تحتوي B → أمر2 | وإلا إذا تحتوي C → أمر3 | وإلا → رجوع
+
+🔁 حلقة:
+  كرر 3 مرات → على الصوت
+
+🔁 حلقة + شرط داخلها:
+  كرر 5 مرات → إذا تحتوي تأكيد → اضغط على تأكيد | وإلا → سكرين شوت
+
+🔗 شروط مركبة:
+  إذا تحتوي A و تحتوي B → أمر
+  إذا تحتوي A أو تحتوي B → أمر
 """.trim()
 }
