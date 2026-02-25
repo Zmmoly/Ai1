@@ -35,19 +35,26 @@ class MyAccessibilityService : AccessibilityService() {
     // ===== وظائف متقدمة =====
 
     /**
-     * الضغط على عنصر بناءً على النص
+     * الضغط على عنصر بناءً على النص — بإحداثيات عشوائية داخل العنصر
      */
     fun clickByText(text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
-        val targetNode = findNodeByText(rootNode, text)
-        
-        return if (targetNode != null) {
-            targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            targetNode.recycle()
-            true
-        } else {
-            false
-        }
+        val targetNode = findNodeByText(rootNode, text) ?: return false
+
+        val bounds = Rect()
+        targetNode.getBoundsInScreen(bounds)
+        targetNode.recycle()
+
+        if (bounds.isEmpty) return false
+
+        // إحداثيات عشوائية داخل حدود العنصر (مع هامش 20% من الحواف)
+        val marginX = (bounds.width() * 0.2f).toInt().coerceAtLeast(2)
+        val marginY = (bounds.height() * 0.2f).toInt().coerceAtLeast(2)
+
+        val randomX = (bounds.left + marginX + (Math.random() * (bounds.width() - marginX * 2))).toFloat()
+        val randomY = (bounds.top + marginY + (Math.random() * (bounds.height() - marginY * 2))).toFloat()
+
+        return performClick(randomX, randomY)
     }
 
     /**
