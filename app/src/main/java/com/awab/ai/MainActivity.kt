@@ -263,15 +263,118 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // ===== نظام التسوق =====
+
+        // تحديد الميزانية: "ميزانيتي 500" / "عندي 300 للسوق"
+        val budgetPatterns = listOf(
+            Regex("(?:ميزانيتي|ميزانيت|معي|عندي|بجيبي)\\s+(\\d+(?:\\.\\d+)?)(?:\\s+(?:ر|ريال|ريالات|للسوق))?", RegexOption.IGNORE_CASE),
+            Regex("(?:بدي|بدأ|ابدأ)\\s+(?:قايمة|قائمة|تسوق)\\s+ب(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE)
+        )
+        for (bp in budgetPatterns) {
+            val bm = bp.find(userMessage) ?: continue
+            val amount = bm.groupValues[1].toDoubleOrNull() ?: continue
+            ShoppingManager.saveBudget(this, amount)
+            val items = ShoppingManager.loadItems(this)
+            val total = ShoppingManager.getTotal(this)
+            val remaining = amount - total
+            addBotMessage(
+                "💼 تم تحديد الميزانية: ${ShoppingManager.formatNum(amount)} ر\n" +
+                if (items.isNotEmpty()) "💰 المصروف حتى الآن: ${ShoppingManager.formatNum(total)} ر\n✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر"
+                else "🛒 القائمة فارغة — ابدأ بإضافة مشترياتك"
+            )
+            return
+        }
+
+        // إضافة مشتريات: "اشتريت ..."
+        val shoppingTriggers = listOf("اشتريت", "أخذت", "اخذت", "جبت", "حصلت على", "شريت")
+        if (shoppingTriggers.any { lower.startsWith(it) }) {
+            val parsed = ShoppingManager.parsePurchase(userMessage)
+            if (parsed != null) {
+                // البحث عن السعر في الذاكرة
+                val memPriceStr = memoryManager.get("سعر ${parsed.itemName}")
+                    ?: memoryManager.get(parsed.itemName)
+                val memPrice = memPriceStr?.replace(Regex("[^\\d.]"), "")?.toDoubleOrNull()
+
+                val item = ShoppingManager.buildItem(parsed, memPrice)
+
+                if (item != null) {
+                    ShoppingManager.addItem(this, item)
+                    val total     = ShoppingManager.getTotal(this)
+                    val budget    = ShoppingManager.loadBudget(this)
+                    val remaining = if (budget > 0) budget - total else -1.0
+
+                    val qtyStr = if (item.quantity != 1.0)
+                        " × ${ShoppingManager.formatNum(item.quantity)}" else ""
+                    val sourceStr = if (item.priceSource == "ذاكرة") " (من الذاكرة 🧠)" else ""
+
+                    val sb = StringBuilder()
+                    sb.appendLine("✅ تمت الإضافة!")
+                    sb.appendLine("🛍️ ${item.name}$qtyStr = ${ShoppingManager.formatNum(item.total)} ر$sourceStr")
+                    sb.appendLine()
+                    sb.appendLine("💰 الإجمالي الآن: ${ShoppingManager.formatNum(total)} ر")
+                    if (remaining >= 0) {
+                        sb.appendLine("✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر")
+                    } else if (budget > 0) {
+                        sb.appendLine("⚠️ تجاوزت الميزانية بـ ${ShoppingManager.formatNum(-remaining)} ر")
+                    }
+                    addBotMessage(sb.toString().trimEnd())
+                } else {
+                    // السعر غير موجود — نسأل
+                    addBotMessage(
+                        "❓ ما سعر ${parsed.itemName}؟\n\n" +
+                        "يمكنك قول:\n" +
+                        "• اشتريت ${parsed.itemName} بـ [السعر]\n" +
+                        "• أو احفظ السعر: سعر ${parsed.itemName} هو [السعر]"
+                    )
+                }
+            } else {
+                addBotMessage("⚠️ لم أفهم ماذا اشتريت. جرب: اشتريت تفاح بـ 10")
+            }
+            return
+        }
+
+        // عرض قائمة التسوق
+        if (lower.contains("قايمة") || lower.contains("قائمة") || lower.contains("مشترياتي") ||
+            lower.contains("اعرض السوق") || lower.contains("الفاتورة") || lower.contains("الحساب")) {
+            addBotMessage(ShoppingManager.formatReceipt(this))
+            return
+        }
+
+        // مسح قائمة التسوق
+        if (lower.contains("امسح القايمة") || lower.contains("امسح القائمة") ||
+            lower.contains("ابدأ من جديد") || lower.contains("مسح المشتريات")) {
+            ShoppingManager.clearItems(this)
+            addBotMessage("🗑️ تم مسح قائمة التسوق. جاهز لقائمة جديدة!")
+            return
+        }
+
+        // الباقي / الإجمالي
+        if (lower.contains("كم الباقي") || lower.contains("كم تبقى") || lower.contains("كم صرفت")) {
+            val total   = ShoppingManager.getTotal(this)
+            val budget  = ShoppingManager.loadBudget(this)
+            val items   = ShoppingManager.loadItems(this)
+            if (items.isEmpty()) {
+                addBotMessage("🛒 لم تشتري أي شيء بعد.")
+                return
+            }
+            val sb = StringBuilder()
+            sb.appendLine("💰 الإجمالي المصروف: ${ShoppingManager.formatNum(total)} ر")
+            if (budget > 0) {
+                val rem = budget - total
+                if (rem >= 0) sb.appendLine("✅ الباقي: ${ShoppingManager.formatNum(rem)} ر")
+                else sb.appendLine("⚠️ تجاوزت بـ ${ShoppingManager.formatNum(-rem)} ر")
+            }
+            addBotMessage(sb.toString().trimEnd())
+            return
+        }
+
         // ===== نظام الذاكرة =====
 
         // حفظ معلومة: "تذكر أن ..." / "احفظ أن ..." / "سعر X هو Y"
         val savePatterns = listOf(
             Regex("تذكر(?:\\s+أن|\\s+ان)?\\s+(.+?)\\s+(?:هو|هي|=|يساوي|بسعر|ب)\\s+(.+)", RegexOption.IGNORE_CASE),
             Regex("احفظ(?:\\s+أن|\\s+ان)?\\s+(.+?)\\s+(?:هو|هي|=|يساوي|بسعر|ب)\\s+(.+)", RegexOption.IGNORE_CASE),
-            Regex("سعر\\s+(.+?)\\s+(?:هو|=|يساوي|ب)\\s+(.+)", RegexOption.IGNORE_CASE),
-            Regex("اشتريت\\s+(.+?)\\s+(?:ب|بسعر)\\s+(.+)", RegexOption.IGNORE_CASE),
-            Regex("دفعت\\s+(.+?)\\s+(?:على|لـ|ل)\\s+(.+)", RegexOption.IGNORE_CASE)
+            Regex("سعر\\s+(.+?)\\s+(?:هو|=|يساوي|ب)\\s+(.+)", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in savePatterns) {
