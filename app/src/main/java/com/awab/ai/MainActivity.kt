@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
 
     private var isRecording = false
     private val RECORD_AUDIO_PERMISSION_CODE = 200
+    private val CUSTOM_COMMANDS_REQUEST_CODE = 300
 
     // مستقبل البث من الخدمة الخلفية
     private val recordingReceiver = object : BroadcastReceiver() {
@@ -120,7 +121,7 @@ class MainActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
 
-        addBotMessage("مرحباً! أنا أواب AI 🤖\n\nكيف يمكني مساعدتك اليوم؟")
+        addBotMessage("مرحباً! أنا أواب AI 🤖\n\nكيف يمكني مساعدتك اليوم؟\n\n⚡ يمكنك إنشاء أوامر مخصصة متسلسلة من زر ⚡")
     }
 
     private fun createInputArea(): LinearLayout {
@@ -161,6 +162,14 @@ class MainActivity : AppCompatActivity() {
             })
 
             addView(TextView(this@MainActivity).apply {
+                text = "⚡"
+                textSize = 24f
+                setTextColor(0xFF075E54.toInt())
+                setPadding(16, 0, 0, 0)
+                setOnClickListener { openCustomCommands() }
+            })
+
+            addView(TextView(this@MainActivity).apply {
                 text = "⚙️"
                 textSize = 24f
                 setTextColor(0xFF075E54.toInt())
@@ -180,6 +189,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleBotResponse(userMessage: String) {
         val lower = userMessage.lowercase().trim()
+
+        // ===== فحص الأوامر المخصصة أولاً =====
+        val customCmd = CustomCommandsManager.findByTrigger(this, userMessage)
+        if (customCmd != null) {
+            addBotMessage("⚡ تنفيذ الأمر المخصص: \"${customCmd.name}\"\n${customCmd.steps.size} خطوات...")
+            executeCustomCommand(customCmd, 0)
+            return
+        }
 
         // ===== نظام الذاكرة =====
 
@@ -392,6 +409,47 @@ class MainActivity : AppCompatActivity() {
 
     private fun openSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    private fun openCustomCommands() {
+        val intent = Intent(this, CustomCommandsActivity::class.java)
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, CUSTOM_COMMANDS_REQUEST_CODE)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == CUSTOM_COMMANDS_REQUEST_CODE && resultCode == RESULT_OK) {
+            val cmdName = data?.getStringExtra("run_custom_command")
+            if (!cmdName.isNullOrBlank()) {
+                inputField.setText(cmdName)
+                sendMessage()
+            }
+        }
+    }
+
+    /**
+     * تنفيذ أمر مخصص خطوة بخطوة مع التأخير المحدد
+     */
+    private fun executeCustomCommand(cmd: CustomCommand, stepIndex: Int) {
+        if (stepIndex >= cmd.steps.size) {
+            addBotMessage("✅ تم تنفيذ الأمر المخصص \"${cmd.name}\" بالكامل! (${cmd.steps.size} خطوات)")
+            return
+        }
+
+        val step = cmd.steps[stepIndex]
+        addBotMessage("▶️ الخطوة ${stepIndex + 1}/${cmd.steps.size}: $step")
+
+        android.os.Handler(mainLooper).postDelayed({
+            val response = commandHandler.handleCommand(step)
+            addBotMessage(response ?: "⚠️ لم أفهم الأمر: \"$step\"")
+
+            // الانتقال للخطوة التالية بعد التأخير
+            android.os.Handler(mainLooper).postDelayed({
+                executeCustomCommand(cmd, stepIndex + 1)
+            }, (cmd.delaySeconds * 1000L))
+        }, 400)
     }
 
     // ============================
