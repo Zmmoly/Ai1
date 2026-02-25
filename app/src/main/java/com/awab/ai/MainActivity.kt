@@ -495,25 +495,83 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * تنفيذ أمر مخصص خطوة بخطوة مع التأخير المحدد
+     * تنفيذ أمر مخصص خطوة بخطوة مع دعم الشروط والحلقات
      */
     private fun executeCustomCommand(cmd: CustomCommand, stepIndex: Int) {
         if (stepIndex >= cmd.steps.size) {
-            addBotMessage("✅ تم تنفيذ الأمر المخصص \"${cmd.name}\" بالكامل! (${cmd.steps.size} خطوات)")
+            addBotMessage("✅ تم تنفيذ \"${cmd.name}\" بالكامل! (${cmd.steps.size} خطوات)")
             return
         }
 
-        val step = cmd.steps[stepIndex]
-        addBotMessage("▶️ الخطوة ${stepIndex + 1}/${cmd.steps.size}: $step")
+        val rawStep = cmd.steps[stepIndex]
+        val step = StepEngine.parse(rawStep)
+        val delayMs = cmd.delaySeconds * 1000L
 
+        when (step) {
+
+            // ===== خطوة عادية =====
+            is Step.Normal -> {
+                addBotMessage("▶️ ${stepIndex + 1}/${cmd.steps.size}: ${step.command}")
+                android.os.Handler(mainLooper).postDelayed({
+                    val result = commandHandler.handleCommand(step.command)
+                    addBotMessage(result ?: "⚠️ لم أفهم: \"${step.command}\"")
+                    android.os.Handler(mainLooper).postDelayed({
+                        executeCustomCommand(cmd, stepIndex + 1)
+                    }, delayMs)
+                }, 400)
+            }
+
+            // ===== شرط =====
+            is Step.Condition -> {
+                addBotMessage("🔀 ${stepIndex + 1}/${cmd.steps.size}: فحص الشرط [${step.condition}]...")
+                android.os.Handler(mainLooper).postDelayed({
+                    val condResult = StepEngine.evaluateCondition(step.condition)
+                    val chosenCmd = if (condResult) step.onTrue else step.onFalse
+                    if (chosenCmd != null) {
+                        val icon = if (condResult) "✅" else "❌"
+                        addBotMessage("$icon الشرط ${if (condResult) "تحقق" else "لم يتحقق"} → $chosenCmd")
+                        android.os.Handler(mainLooper).postDelayed({
+                            val result = commandHandler.handleCommand(chosenCmd)
+                            addBotMessage(result ?: "⚠️ لم أفهم: \"$chosenCmd\"")
+                            android.os.Handler(mainLooper).postDelayed({
+                                executeCustomCommand(cmd, stepIndex + 1)
+                            }, delayMs)
+                        }, 400)
+                    } else {
+                        addBotMessage("⏭️ الشرط لم يتحقق ولا يوجد بديل، تخطي...")
+                        android.os.Handler(mainLooper).postDelayed({
+                            executeCustomCommand(cmd, stepIndex + 1)
+                        }, delayMs)
+                    }
+                }, 400)
+            }
+
+            // ===== حلقة =====
+            is Step.Loop -> {
+                addBotMessage("🔁 ${stepIndex + 1}/${cmd.steps.size}: تكرار \"${step.command}\" × ${step.times}")
+                executeLoop(step.command, step.times, 0, delayMs) {
+                    android.os.Handler(mainLooper).postDelayed({
+                        executeCustomCommand(cmd, stepIndex + 1)
+                    }, delayMs)
+                }
+            }
+        }
+    }
+
+    /** تنفيذ حلقة التكرار بشكل متسلسل */
+    private fun executeLoop(command: String, total: Int, current: Int, delayMs: Long, onDone: () -> Unit) {
+        if (current >= total) {
+            addBotMessage("✅ انتهى التكرار ($total مرات)")
+            onDone()
+            return
+        }
+        addBotMessage("🔁 تكرار ${current + 1}/$total: $command")
         android.os.Handler(mainLooper).postDelayed({
-            val response = commandHandler.handleCommand(step)
-            addBotMessage(response ?: "⚠️ لم أفهم الأمر: \"$step\"")
-
-            // الانتقال للخطوة التالية بعد التأخير
+            val result = commandHandler.handleCommand(command)
+            addBotMessage(result ?: "⚠️ لم أفهم: \"$command\"")
             android.os.Handler(mainLooper).postDelayed({
-                executeCustomCommand(cmd, stepIndex + 1)
-            }, (cmd.delaySeconds * 1000L))
+                executeLoop(command, total, current + 1, delayMs, onDone)
+            }, delayMs)
         }, 400)
     }
 
