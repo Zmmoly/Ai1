@@ -237,10 +237,10 @@ class CustomCommandsActivity : AppCompatActivity() {
 
             cmd.steps.forEachIndexed { i, raw ->
                 val step = StepEngine.parse(raw)
-                val (icon, color) = when (step) {
-                    is Step.Normal    -> Pair("▶", 0xFF444444.toInt())
-                    is Step.Condition -> Pair("🔀", 0xFF1565C0.toInt())
-                    is Step.Loop      -> Pair("🔁", 0xFF6A1B9A.toInt())
+                val color = when (step) {
+                    is Step.Normal  -> 0xFF444444.toInt()
+                    is Step.IfChain -> 0xFF1565C0.toInt()
+                    is Step.Loop    -> 0xFF6A1B9A.toInt()
                 }
                 addView(TextView(this@CustomCommandsActivity).apply {
                     text = "${i + 1}. ${StepEngine.describe(step)}"
