@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
 
         commandHandler = CommandHandler(this)
         memoryManager = MemoryManager(this)
+        ReminderManager.createNotificationChannel(this)
 
         // تسجيل مستقبل البث
         val filter = IntentFilter().apply {
@@ -195,6 +196,70 @@ class MainActivity : AppCompatActivity() {
         if (customCmd != null) {
             addBotMessage("⚡ تنفيذ الأمر المخصص: \"${customCmd.name}\"\n${customCmd.steps.size} خطوات...")
             executeCustomCommand(customCmd, 0)
+            return
+        }
+
+        // ===== التذكيرات =====
+
+        // عرض التذكيرات المعلقة
+        if (lower.contains("اعرض التذكيرات") || lower.contains("كل التذكيرات") ||
+            lower.contains("ماهي التذكيرات") || lower.contains("التذكيرات المعلقة")) {
+            val pending = ReminderManager.getPendingReminders(this)
+            if (pending.isEmpty()) {
+                addBotMessage("📭 لا توجد تذكيرات معلقة حالياً.")
+            } else {
+                val sb = StringBuilder("⏰ التذكيرات المعلقة (${pending.size}):\n\n")
+                val now = System.currentTimeMillis()
+                pending.forEachIndexed { i, r ->
+                    val remaining = r.triggerTimeMs - now
+                    sb.appendLine("${i + 1}. 📌 ${r.text}")
+                    sb.appendLine("   ⏳ بعد ${ReminderManager.formatDuration(remaining)}")
+                }
+                addBotMessage(sb.toString().trimEnd())
+            }
+            return
+        }
+
+        // حذف تذكير
+        if (lower.startsWith("احذف التذكير") || lower.startsWith("امسح التذكير")) {
+            val pending = ReminderManager.getPendingReminders(this)
+            if (pending.isEmpty()) {
+                addBotMessage("📭 لا توجد تذكيرات لحذفها.")
+            } else {
+                pending.forEach { ReminderManager.deleteReminder(this, it.id) }
+                addBotMessage("🗑️ تم حذف جميع التذكيرات (${pending.size}).")
+            }
+            return
+        }
+
+        // إنشاء تذكير جديد
+        val reminderTriggers = listOf("ذكرني", "تذكيرني", "نبهني", "خلني أتذكر")
+        if (reminderTriggers.any { lower.startsWith(it) }) {
+            val parsed = ReminderManager.parseReminder(userMessage)
+            if (parsed != null) {
+                val (text, triggerTimeMs) = parsed
+                ReminderManager.addReminder(this, text, triggerTimeMs)
+                val diff = triggerTimeMs - System.currentTimeMillis()
+                addBotMessage(
+                    "✅ تم ضبط التذكير!\n\n" +
+                    "📌 التذكير: $text\n" +
+                    "🗓️ الموعد: ${ReminderManager.formatTriggerTime(triggerTimeMs)}\n\n" +
+                    "سأرسل لك إشعاراً عند انتهاء الوقت 🔔"
+                )
+            } else {
+                addBotMessage(
+                    "⚠️ لم أفهم الوقت أو التاريخ.\n\n" +
+                    "📅 بتاريخ محدد:\n" +
+                    "• ذكرني في 25/6 الساعة 9 صباحاً باجتماع\n" +
+                    "• ذكرني يوم الجمعة الساعة 3 عصراً بالدواء\n" +
+                    "• ذكرني غداً الساعة 8:30 صباحاً\n" +
+                    "• ذكرني اليوم الساعة 10 مساءً\n\n" +
+                    "⏳ بعد مدة:\n" +
+                    "• ذكرني بعد 5 دقائق بشرب الماء\n" +
+                    "• ذكرني بعد ساعة باجتماع\n" +
+                    "• ذكرني بعد يومين بالدواء"
+                )
+            }
             return
         }
 
