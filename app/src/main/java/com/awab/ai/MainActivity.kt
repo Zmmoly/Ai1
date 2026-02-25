@@ -495,84 +495,128 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * تنفيذ أمر مخصص خطوة بخطوة مع دعم الشروط والحلقات
+     * تنفيذ أمر مخصص — يدعم الشروط والحلقات المتداخلة بلا حدود
      */
     private fun executeCustomCommand(cmd: CustomCommand, stepIndex: Int) {
         if (stepIndex >= cmd.steps.size) {
-            addBotMessage("✅ تم تنفيذ \"${cmd.name}\" بالكامل! (${cmd.steps.size} خطوات)")
+            addBotMessage("✅ تم تنفيذ \"${cmd.name}\" بالكامل!")
             return
         }
-
         val rawStep = cmd.steps[stepIndex]
         val step = StepEngine.parse(rawStep)
         val delayMs = cmd.delaySeconds * 1000L
 
+        executeStep(step, delayMs) {
+            android.os.Handler(mainLooper).postDelayed({
+                executeCustomCommand(cmd, stepIndex + 1)
+            }, delayMs)
+        }
+    }
+
+    /**
+     * تنفيذ خطوة واحدة (أي نوع) ثم استدعاء onDone عند الانتهاء
+     * هذا هو قلب المحرك — يعمل بشكل متكرر بلا حدود
+     */
+    private fun executeStep(step: Step, delayMs: Long, onDone: () -> Unit) {
         when (step) {
 
-            // ===== خطوة عادية =====
+            // ── خطوة عادية ──────────────────────────
             is Step.Normal -> {
-                addBotMessage("▶️ ${stepIndex + 1}/${cmd.steps.size}: ${step.command}")
+                addBotMessage("▶️ ${step.command}")
                 android.os.Handler(mainLooper).postDelayed({
                     val result = commandHandler.handleCommand(step.command)
                     addBotMessage(result ?: "⚠️ لم أفهم: \"${step.command}\"")
-                    android.os.Handler(mainLooper).postDelayed({
-                        executeCustomCommand(cmd, stepIndex + 1)
-                    }, delayMs)
+                    android.os.Handler(mainLooper).postDelayed(onDone, delayMs)
                 }, 400)
             }
 
-            // ===== شرط =====
-            is Step.Condition -> {
-                addBotMessage("🔀 ${stepIndex + 1}/${cmd.steps.size}: فحص الشرط [${step.condition}]...")
-                android.os.Handler(mainLooper).postDelayed({
-                    val condResult = StepEngine.evaluateCondition(step.condition)
-                    val chosenCmd = if (condResult) step.onTrue else step.onFalse
-                    if (chosenCmd != null) {
-                        val icon = if (condResult) "✅" else "❌"
-                        addBotMessage("$icon الشرط ${if (condResult) "تحقق" else "لم يتحقق"} → $chosenCmd")
-                        android.os.Handler(mainLooper).postDelayed({
-                            val result = commandHandler.handleCommand(chosenCmd)
-                            addBotMessage(result ?: "⚠️ لم أفهم: \"$chosenCmd\"")
-                            android.os.Handler(mainLooper).postDelayed({
-                                executeCustomCommand(cmd, stepIndex + 1)
-                            }, delayMs)
-                        }, 400)
-                    } else {
-                        addBotMessage("⏭️ الشرط لم يتحقق ولا يوجد بديل، تخطي...")
-                        android.os.Handler(mainLooper).postDelayed({
-                            executeCustomCommand(cmd, stepIndex + 1)
-                        }, delayMs)
-                    }
-                }, 400)
+            // ── سلسلة شروط (بلا حدود) ───────────────
+            is Step.IfChain -> {
+                evaluateIfChain(step, delayMs, onDone)
             }
 
-            // ===== حلقة =====
+            // ── حلقة ────────────────────────────────
             is Step.Loop -> {
-                addBotMessage("🔁 ${stepIndex + 1}/${cmd.steps.size}: تكرار \"${step.command}\" × ${step.times}")
-                executeLoop(step.command, step.times, 0, delayMs) {
-                    android.os.Handler(mainLooper).postDelayed({
-                        executeCustomCommand(cmd, stepIndex + 1)
-                    }, delayMs)
-                }
+                addBotMessage("🔁 حلقة تكرار × ${step.times}")
+                executeLoopBody(step.body, step.times, 0, delayMs, onDone)
             }
         }
     }
 
-    /** تنفيذ حلقة التكرار بشكل متسلسل */
-    private fun executeLoop(command: String, total: Int, current: Int, delayMs: Long, onDone: () -> Unit) {
+    /**
+     * تقييم سلسلة الشروط:
+     * يتحقق من كل فرع بالترتيب حتى يجد شرطاً صحيحاً
+     * ثم ينفّذ خطواته ← recursively
+     */
+    private fun evaluateIfChain(chain: Step.IfChain, delayMs: Long, onDone: () -> Unit) {
+        evaluateBranches(chain.branches, 0, chain.elseBranch, delayMs, onDone)
+    }
+
+    private fun evaluateBranches(
+        branches: List<Step.IfChain.Branch>,
+        index: Int,
+        elseBranch: List<Step>?,
+        delayMs: Long,
+        onDone: () -> Unit
+    ) {
+        // لا يوجد فرع مطابق → نفّذ وإلا أو تخطّ
+        if (index >= branches.size) {
+            if (elseBranch != null) {
+                addBotMessage("↩ وإلا")
+                executeStepList(elseBranch, delayMs, onDone)
+            } else {
+                addBotMessage("⏭️ لا شرط تحقق، تخطي...")
+                onDone()
+            }
+            return
+        }
+
+        val branch = branches[index]
+        android.os.Handler(mainLooper).postDelayed({
+            val result = StepEngine.evaluateCondition(branch.condition)
+            if (result) {
+                addBotMessage("✅ تحقق: [${branch.condition}]")
+                executeStepList(branch.steps, delayMs, onDone)
+            } else {
+                addBotMessage("❌ لم يتحقق: [${branch.condition}]")
+                // جرّب الفرع التالي
+                android.os.Handler(mainLooper).postDelayed({
+                    evaluateBranches(branches, index + 1, elseBranch, delayMs, onDone)
+                }, 300)
+            }
+        }, 400)
+    }
+
+    /**
+     * تنفيذ قائمة خطوات بالتسلسل ثم استدعاء onDone
+     */
+    private fun executeStepList(steps: List<Step>, delayMs: Long, onDone: () -> Unit) {
+        fun next(i: Int) {
+            if (i >= steps.size) { onDone(); return }
+            executeStep(steps[i], delayMs) {
+                android.os.Handler(mainLooper).postDelayed({ next(i + 1) }, delayMs)
+            }
+        }
+        next(0)
+    }
+
+    /**
+     * تنفيذ جسم الحلقة N مرة
+     */
+    private fun executeLoopBody(
+        body: List<Step>, total: Int, current: Int, delayMs: Long, onDone: () -> Unit
+    ) {
         if (current >= total) {
-            addBotMessage("✅ انتهى التكرار ($total مرات)")
+            addBotMessage("✅ انتهت الحلقة ($total مرات)")
             onDone()
             return
         }
-        addBotMessage("🔁 تكرار ${current + 1}/$total: $command")
-        android.os.Handler(mainLooper).postDelayed({
-            val result = commandHandler.handleCommand(command)
-            addBotMessage(result ?: "⚠️ لم أفهم: \"$command\"")
+        addBotMessage("🔁 تكرار ${current + 1}/$total")
+        executeStepList(body, delayMs) {
             android.os.Handler(mainLooper).postDelayed({
-                executeLoop(command, total, current + 1, delayMs, onDone)
+                executeLoopBody(body, total, current + 1, delayMs, onDone)
             }, delayMs)
-        }, 400)
+        }
     }
 
     // ============================
