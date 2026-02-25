@@ -235,12 +235,18 @@ class CustomCommandsActivity : AppCompatActivity() {
                 ).apply { setMargins(0, 12, 0, 8) }
             })
 
-            cmd.steps.forEachIndexed { i, step ->
+            cmd.steps.forEachIndexed { i, raw ->
+                val step = StepEngine.parse(raw)
+                val (icon, color) = when (step) {
+                    is Step.Normal    -> Pair("▶", 0xFF444444.toInt())
+                    is Step.Condition -> Pair("🔀", 0xFF1565C0.toInt())
+                    is Step.Loop      -> Pair("🔁", 0xFF6A1B9A.toInt())
+                }
                 addView(TextView(this@CustomCommandsActivity).apply {
-                    text = "${i + 1}. $step"
+                    text = "${i + 1}. ${StepEngine.describe(step)}"
                     textSize = 13f
-                    setTextColor(0xFF444444.toInt())
-                    setPadding(0, 2, 0, 2)
+                    setTextColor(color)
+                    setPadding(0, 3, 0, 3)
                 })
             }
         }
@@ -300,19 +306,50 @@ class CustomCommandsActivity : AppCompatActivity() {
             stepFields.add(addStepRow(stepsContainer, stepFields, ""))
         }
 
-        // زر إضافة خطوة
-        container.addView(TextView(this).apply {
-            text = "+ إضافة خطوة"
-            textSize = 14f
-            setTextColor(PRIMARY_COLOR)
+        // أزرار إضافة الخطوات
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             setPadding(0, 12, 0, 4)
+        }
+
+        fun makeAddBtn(label: String, color: Int, template: String) = TextView(this).apply {
+            text = label
+            textSize = 12f
+            setTextColor(WHITE)
+            setPadding(14, 8, 14, 8)
+            background = roundedCard(color, 16f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 8, 0) }
             setOnClickListener {
-                stepFields.add(addStepRow(stepsContainer, stepFields, ""))
+                stepFields.add(addStepRow(stepsContainer, stepFields, template))
+            }
+        }
+
+        btnRow.addView(makeAddBtn("+ خطوة", PRIMARY_COLOR, ""))
+        btnRow.addView(makeAddBtn("🔀 شرط", 0xFF1565C0.toInt(),
+            "إذا الشاشة تحتوي [نص]: [أمر_صح] وإلا: [أمر_خطأ]"))
+        btnRow.addView(makeAddBtn("🔁 حلقة", 0xFF6A1B9A.toInt(),
+            "كرر [N] مرات: [الأمر]"))
+        container.addView(btnRow)
+
+        // تلميح الصيغ
+        container.addView(label("💡 صيغ الخطوات:"))
+        container.addView(TextView(this).apply {
+            text = StepEngine.SYNTAX_HINTS
+            textSize = 12f
+            setTextColor(0xFF444444.toInt())
+            setBackgroundColor(0xFFF0F4FF.toInt())
+            setPadding(16, 12, 16, 12)
+            background = GradientDrawable().apply {
+                setColor(0xFFF0F4FF.toInt())
+                cornerRadius = 8f
             }
         })
 
         // تلميح الأوامر المتاحة
-        container.addView(label("💡 الأوامر المتاحة:"))
+        container.addView(label("📋 الأوامر المتاحة:"))
         container.addView(TextView(this).apply {
             text = CustomCommandsManager.AVAILABLE_COMMANDS.joinToString("\n") { "• $it" }
             textSize = 12f
@@ -447,8 +484,9 @@ class CustomCommandsActivity : AppCompatActivity() {
         val preview = StringBuilder()
         preview.appendLine("⚡ سيتم تنفيذ: \"${cmd.name}\"")
         preview.appendLine()
-        cmd.steps.forEachIndexed { i, step ->
-            preview.appendLine("${i + 1}. $step")
+        cmd.steps.forEachIndexed { i, raw ->
+            val step = StepEngine.parse(raw)
+            preview.appendLine("${i + 1}. ${StepEngine.describe(step)}")
             if (i < cmd.steps.size - 1) preview.appendLine("   ⏳ انتظار ${cmd.delaySeconds}ث...")
         }
 
@@ -457,7 +495,6 @@ class CustomCommandsActivity : AppCompatActivity() {
             .setMessage(preview.toString())
             .setPositiveButton("تشغيل الآن") { _, _ ->
                 Toast.makeText(this, "⚡ اكتب \"${cmd.name}\" في شاشة الرئيسية لتشغيله", Toast.LENGTH_LONG).show()
-                // إرجاع للشاشة الرئيسية مع تمرير الأمر للتنفيذ
                 val result = android.content.Intent()
                 result.putExtra("run_custom_command", cmd.name)
                 setResult(RESULT_OK, result)
