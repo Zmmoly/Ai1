@@ -422,9 +422,11 @@ class MainActivity : AppCompatActivity() {
 
         // الباقي / الإجمالي
         if (lower.contains("كم الباقي") || lower.contains("كم تبقى") || lower.contains("كم صرفت")) {
-            val total   = ShoppingManager.getTotal(this)
-            val budget  = ShoppingManager.loadBudget(this)
-            val items   = ShoppingManager.loadItems(this)
+            val session   = ShoppingManager.getActiveSession(this)
+            val sessionId = ShoppingManager.getActiveSessionId(this)
+            val total     = ShoppingManager.getSessionTotal(this, sessionId)
+            val budget    = session?.budget ?: 0.0
+            val items     = ShoppingManager.loadItems(this).filter { it.sessionId == sessionId }
             if (items.isEmpty()) {
                 addBotMessage("🛒 لم تشتري أي شيء بعد.")
                 return
