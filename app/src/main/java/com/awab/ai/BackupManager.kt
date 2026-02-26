@@ -27,10 +27,11 @@ object BackupManager {
             val memory = context.getSharedPreferences("awab_memory", Context.MODE_PRIVATE)
             root.put("memory", memory.getString("data", "{}"))
 
-            // 2) المشتريات والميزانية
+            // 2) المشتريات والميزانية والجلسات
             val shopping = context.getSharedPreferences("shopping_prefs", Context.MODE_PRIVATE)
-            root.put("shopping_items",  shopping.getString("shopping_items", "[]"))
-            root.put("shopping_budget", shopping.getFloat("shopping_budget", 0f).toDouble())
+            root.put("shopping_items",    shopping.getString("shopping_items", "[]"))
+            root.put("shopping_sessions", shopping.getString("shopping_sessions", "[]"))
+            root.put("active_session_id", shopping.getString("active_session_id", "general"))
 
             // 3) أسماء التطبيقات المخصصة
             val appNames = context.getSharedPreferences("app_names", Context.MODE_PRIVATE)
@@ -84,12 +85,13 @@ object BackupManager {
                 restored++
             }
 
-            // 2) المشتريات والميزانية
+            // 2) المشتريات والجلسات
             if (root.has("shopping_items")) {
                 context.getSharedPreferences("shopping_prefs", Context.MODE_PRIVATE)
                     .edit()
-                    .putString("shopping_items", root.getString("shopping_items"))
-                    .putFloat("shopping_budget", root.getDouble("shopping_budget").toFloat())
+                    .putString("shopping_items",    root.getString("shopping_items"))
+                    .putString("shopping_sessions", root.optString("shopping_sessions", "[]"))
+                    .putString("active_session_id", root.optString("active_session_id", "general"))
                     .apply()
                 restored++
             }
