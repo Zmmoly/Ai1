@@ -201,6 +201,30 @@ class MainActivity : AppCompatActivity() {
     private fun handleBotResponse(userMessage: String) {
         val lower = userMessage.lowercase().trim()
 
+        // ===== النسخ الاحتياطي =====
+
+        if (lower.contains("صدّر") || lower.contains("صدر بياناتي") ||
+            lower.contains("نسخ احتياطي") || lower.contains("احفظ بياناتي")) {
+            val path = BackupManager.export(this)
+            if (path != null) {
+                addBotMessage("✅ تم تصدير البيانات!\n\n📁 المسار:\n$path")
+            } else {
+                addBotMessage("❌ فشل التصدير — تأكد من صلاحية التخزين")
+            }
+            return
+        }
+
+        if (lower.contains("استورد") || lower.contains("استعادة البيانات") ||
+            lower.contains("رجّع بياناتي") || lower.contains("رجع بياناتي")) {
+            addBotMessage(BackupManager.import(this))
+            return
+        }
+
+        if (lower.contains("مسار النسخة") || lower.contains("اين النسخة") || lower.contains("أين النسخة")) {
+            addBotMessage("📁 مسار النسخة الاحتياطية:\n${BackupManager.getBackupPath(this)}")
+            return
+        }
+
         // ===== فحص الأوامر المخصصة أولاً =====
         val customCmd = CustomCommandsManager.findByTrigger(this, userMessage)
         if (customCmd != null) {
