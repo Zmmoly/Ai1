@@ -371,6 +371,9 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
+
+        // عرض قائمة التسوق
+        if (lower.contains("قايمة") || lower.contains("قائمة") || lower.contains("مشترياتي") ||
             lower.contains("اعرض السوق") || lower.contains("الفاتورة") || lower.contains("الحساب")) {
             addBotMessage(ShoppingManager.formatReceipt(this))
             return
