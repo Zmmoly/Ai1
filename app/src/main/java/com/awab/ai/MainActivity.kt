@@ -299,7 +299,28 @@ class MainActivity : AppCompatActivity() {
 
         // ===== نظام التسوق =====
 
-        // تحديد الميزانية: "ميزانيتي 500" / "عندي 300 للسوق"
+        // إنهاء الجلسة
+        if (lower.contains("انهي الجلسة") || lower.contains("انهي الجلسه") ||
+            lower.contains("أنهي الجلسة") || lower.contains("خلص الجلسة")) {
+            val session = ShoppingManager.endActiveSession(this)
+            if (session != null) {
+                val total = ShoppingManager.getSessionTotal(this, session.id)
+                val sb = StringBuilder("✅ تم إنهاء ${session.label}\n")
+                sb.appendLine("─────────────────")
+                sb.append("💰 إجمالي الجلسة: ${ShoppingManager.formatNum(total)} ر")
+                if (session.budget > 0) {
+                    val remaining = session.budget - total
+                    if (remaining >= 0) sb.append(" | ✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر")
+                    else sb.append(" | ⚠️ تجاوزت بـ ${ShoppingManager.formatNum(-remaining)} ر")
+                }
+                addBotMessage(sb.toString())
+            } else {
+                addBotMessage("⚠️ لا توجد جلسة مفتوحة حالياً")
+            }
+            return
+        }
+
+        // تحديد الميزانية وبدء جلسة جديدة
         val budgetPatterns = listOf(
             Regex("(?:ميزانيتي|ميزانيت|معي|عندي|بجيبي)\\s+(\\d+(?:\\.\\d+)?)(?:\\s+(?:ر|ريال|ريالات|للسوق))?", RegexOption.IGNORE_CASE),
             Regex("(?:بدي|بدأ|ابدأ)\\s+(?:قايمة|قائمة|تسوق)\\s+ب(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE)
@@ -307,53 +328,45 @@ class MainActivity : AppCompatActivity() {
         for (bp in budgetPatterns) {
             val bm = bp.find(userMessage) ?: continue
             val amount = bm.groupValues[1].toDoubleOrNull() ?: continue
-            ShoppingManager.saveBudget(this, amount)
-            val items = ShoppingManager.loadItems(this)
-            val total = ShoppingManager.getTotal(this)
-            val remaining = amount - total
+            val session = ShoppingManager.startNewSession(this, amount)
             addBotMessage(
-                "💼 تم تحديد الميزانية: ${ShoppingManager.formatNum(amount)} ر\n" +
-                if (items.isNotEmpty()) "💰 المصروف حتى الآن: ${ShoppingManager.formatNum(total)} ر\n✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر"
-                else "🛒 القائمة فارغة — ابدأ بإضافة مشترياتك"
+                "💼 بدأت ${session.label} بميزانية ${ShoppingManager.formatNum(amount)} ر\n" +
+                "🛒 ابدأ بإضافة مشترياتك!"
             )
             return
         }
 
-        // إضافة مشتريات: "اشتريت ..."
+        // إضافة مشتريات
         val shoppingTriggers = listOf("اشتريت", "أخذت", "اخذت", "جبت", "حصلت على", "شريت")
         if (shoppingTriggers.any { lower.startsWith(it) }) {
             val parsed = ShoppingManager.parsePurchase(userMessage)
             if (parsed != null) {
-                // البحث عن السعر في الذاكرة
                 val memPriceStr = memoryManager.get("سعر ${parsed.itemName}")
                     ?: memoryManager.get(parsed.itemName)
                 val memPrice = memPriceStr?.replace(Regex("[^\\d.]"), "")?.toDoubleOrNull()
 
-                val item = ShoppingManager.buildItem(parsed, memPrice)
+                val sessionId = ShoppingManager.getActiveSessionId(this)
+                val item = ShoppingManager.buildItem(parsed, memPrice, sessionId)
 
                 if (item != null) {
                     ShoppingManager.addItem(this, item)
-                    val total     = ShoppingManager.getTotal(this)
-                    val budget    = ShoppingManager.loadBudget(this)
+                    val session   = ShoppingManager.getActiveSession(this)
+                    val total     = ShoppingManager.getSessionTotal(this, sessionId)
+                    val budget    = session?.budget ?: 0.0
                     val remaining = if (budget > 0) budget - total else -1.0
 
-                    val qtyStr = if (item.quantity != 1.0)
-                        " × ${ShoppingManager.formatNum(item.quantity)}" else ""
+                    val qtyStr    = if (item.quantity != 1.0) " × ${ShoppingManager.formatNum(item.quantity)}" else ""
                     val sourceStr = if (item.priceSource == "ذاكرة") " (من الذاكرة 🧠)" else ""
 
                     val sb = StringBuilder()
                     sb.appendLine("✅ تمت الإضافة!")
                     sb.appendLine("🛍️ ${item.name}$qtyStr = ${ShoppingManager.formatNum(item.total)} ر$sourceStr")
                     sb.appendLine()
-                    sb.appendLine("💰 الإجمالي الآن: ${ShoppingManager.formatNum(total)} ر")
-                    if (remaining >= 0) {
-                        sb.appendLine("✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر")
-                    } else if (budget > 0) {
-                        sb.appendLine("⚠️ تجاوزت الميزانية بـ ${ShoppingManager.formatNum(-remaining)} ر")
-                    }
+                    sb.appendLine("💰 إجمالي الجلسة: ${ShoppingManager.formatNum(total)} ر")
+                    if (remaining >= 0) sb.appendLine("✅ الباقي: ${ShoppingManager.formatNum(remaining)} ر")
+                    else if (budget > 0) sb.appendLine("⚠️ تجاوزت الميزانية بـ ${ShoppingManager.formatNum(-remaining)} ر")
                     addBotMessage(sb.toString().trimEnd())
                 } else {
-                    // السعر غير موجود — نسأل
                     addBotMessage(
                         "❓ ما سعر ${parsed.itemName}؟\n\n" +
                         "يمكنك قول:\n" +
@@ -368,18 +381,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         // عرض مشتريات بتاريخ محدد
-        val historyTriggers = listOf("ماذا اشتريت", "ايش اشتريت", "إيش اشتريت", "وش اشتريت", "شريت إيش", "قايمة")
+        val historyTriggers = listOf("ماذا اشتريت", "ايش اشتريت", "إيش اشتريت", "وش اشتريت")
         if (historyTriggers.any { lower.contains(it) }) {
-            // استخرج التاريخ من الجملة
             val dateRange = ShoppingManager.parseDate(userMessage)
             if (dateRange != null) {
                 val (start, end) = dateRange
                 val items = ShoppingManager.getItemsByDate(this, start, end)
-
-                // استخرج التسمية من الجملة
                 val dateLabel = when {
-                    lower.contains("اليوم")                          -> "اليوم"
-                    lower.contains("امس") || lower.contains("أمس")  -> "أمس"
+                    lower.contains("اليوم")  -> "اليوم"
+                    lower.contains("امس") || lower.contains("أمس") -> "أمس"
                     lower.contains("أول امس") || lower.contains("اول امس") -> "أول أمس"
                     lower.contains("الجمعة")   -> "يوم الجمعة"
                     lower.contains("الخميس")   -> "يوم الخميس"
@@ -390,16 +400,15 @@ class MainActivity : AppCompatActivity() {
                     lower.contains("السبت")    -> "يوم السبت"
                     else -> Regex("\\d{1,2}/\\d{1,2}").find(userMessage)?.value ?: "ذلك اليوم"
                 }
-
                 addBotMessage(ShoppingManager.formatDateReceipt(this, items, dateLabel))
                 return
             }
         }
 
-        // عرض قائمة التسوق
+        // عرض القائمة الحالية
         if (lower.contains("قايمة") || lower.contains("قائمة") || lower.contains("مشترياتي") ||
             lower.contains("اعرض السوق") || lower.contains("الفاتورة") || lower.contains("الحساب")) {
-            addBotMessage(ShoppingManager.formatReceipt(this))
+            addBotMessage(ShoppingManager.formatCurrentSession(this))
             return
         }
 
