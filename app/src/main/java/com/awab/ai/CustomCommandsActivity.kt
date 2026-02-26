@@ -241,6 +241,7 @@ class CustomCommandsActivity : AppCompatActivity() {
                     is Step.Normal  -> 0xFF444444.toInt()
                     is Step.IfChain -> 0xFF1565C0.toInt()
                     is Step.Loop    -> 0xFF6A1B9A.toInt()
+                    is Step.Wait    -> 0xFF00796B.toInt()
                 }
                 addView(TextView(this@CustomCommandsActivity).apply {
                     text = "${i + 1}. ${StepEngine.describe(step)}"
@@ -332,6 +333,8 @@ class CustomCommandsActivity : AppCompatActivity() {
             "إذا الشاشة تحتوي [نص]: [أمر_صح] وإلا: [أمر_خطأ]"))
         btnRow.addView(makeAddBtn("🔁 حلقة", 0xFF6A1B9A.toInt(),
             "كرر [N] مرات: [الأمر]"))
+        btnRow.addView(makeAddBtn("⏳ انتظار", 0xFF00796B.toInt(),
+            "انتظر ظهور [نص] لمدة 15 ثانية ثم اضغط على [نص]"))
         container.addView(btnRow)
 
         // تلميح الصيغ
