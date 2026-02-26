@@ -343,8 +343,34 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // عرض قائمة التسوق
-        if (lower.contains("قايمة") || lower.contains("قائمة") || lower.contains("مشترياتي") ||
+        // عرض مشتريات بتاريخ محدد
+        val historyTriggers = listOf("ماذا اشتريت", "ايش اشتريت", "إيش اشتريت", "وش اشتريت", "شريت إيش", "قايمة")
+        if (historyTriggers.any { lower.contains(it) }) {
+            // استخرج التاريخ من الجملة
+            val dateRange = ShoppingManager.parseDate(userMessage)
+            if (dateRange != null) {
+                val (start, end) = dateRange
+                val items = ShoppingManager.getItemsByDate(this, start, end)
+
+                // استخرج التسمية من الجملة
+                val dateLabel = when {
+                    lower.contains("اليوم")                          -> "اليوم"
+                    lower.contains("امس") || lower.contains("أمس")  -> "أمس"
+                    lower.contains("أول امس") || lower.contains("اول امس") -> "أول أمس"
+                    lower.contains("الجمعة")   -> "يوم الجمعة"
+                    lower.contains("الخميس")   -> "يوم الخميس"
+                    lower.contains("الأربعاء") || lower.contains("الاربعاء") -> "يوم الأربعاء"
+                    lower.contains("الثلاثاء") -> "يوم الثلاثاء"
+                    lower.contains("الاثنين")  -> "يوم الاثنين"
+                    lower.contains("الأحد") || lower.contains("الاحد") -> "يوم الأحد"
+                    lower.contains("السبت")    -> "يوم السبت"
+                    else -> Regex("\\d{1,2}/\\d{1,2}").find(userMessage)?.value ?: "ذلك اليوم"
+                }
+
+                addBotMessage(ShoppingManager.formatDateReceipt(this, items, dateLabel))
+                return
+            }
+        }
             lower.contains("اعرض السوق") || lower.contains("الفاتورة") || lower.contains("الحساب")) {
             addBotMessage(ShoppingManager.formatReceipt(this))
             return
