@@ -2,22 +2,118 @@ package com.awab.ai
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 class MyAccessibilityService : AccessibilityService() {
 
+    // ===== نظام مهام الانتظار =====
+
+    /**
+     * مهمة انتظار حدث على الشاشة
+     * @param targetText   النص المطلوب ظهوره أو اختفاؤه
+     * @param waitForShow  true = انتظر ظهور / false = انتظر اختفاء
+     * @param timeoutMs    مهلة الانتظار بالميلي ثانية (0 = بلا حدود)
+     * @param onFound      يُستدعى عند تحقق الشرط
+     * @param onTimeout    يُستدعى عند انتهاء المهلة بدون تحقق
+     */
+    data class WaitTask(
+        val id: Int,
+        val targetText: String,
+        val waitForShow: Boolean,
+        val timeoutMs: Long,
+        val onFound: () -> Unit,
+        val onTimeout: () -> Unit
+    )
+
+    private val waitTasks = mutableListOf<WaitTask>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var nextTaskId = 0
+
+    /**
+     * يسجّل مهمة انتظار جديدة
+     * يُرجع ID المهمة (لإلغائها إذا لزم)
+     */
+    fun registerWaitTask(
+        targetText: String,
+        waitForShow: Boolean = true,
+        timeoutMs: Long = 10_000L,
+        onFound: () -> Unit,
+        onTimeout: () -> Unit = {}
+    ): Int {
+        val id = nextTaskId++
+        val task = WaitTask(id, targetText, waitForShow, timeoutMs, onFound, onTimeout)
+
+        synchronized(waitTasks) { waitTasks.add(task) }
+
+        // ضبط timeout إذا كانت المهلة محددة
+        if (timeoutMs > 0) {
+            mainHandler.postDelayed({
+                val removed = synchronized(waitTasks) { waitTasks.removeAll { it.id == id } }
+                if (removed) {
+                    Log.d(TAG, "⏰ انتهت مهلة انتظار: \"$targetText\"")
+                    onTimeout()
+                }
+            }, timeoutMs)
+        }
+
+        Log.d(TAG, "⏳ مهمة انتظار #$id: \"$targetText\" (${if (waitForShow) "ظهور" else "اختفاء"})")
+        return id
+    }
+
+    /** إلغاء مهمة انتظار بالـ ID */
+    fun cancelWaitTask(id: Int) {
+        synchronized(waitTasks) { waitTasks.removeAll { it.id == id } }
+    }
+
+    /** إلغاء جميع مهام الانتظار */
+    fun cancelAllWaitTasks() {
+        synchronized(waitTasks) { waitTasks.clear() }
+    }
+
+    // ===== معالجة أحداث الشاشة =====
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // لا نعالج الأحداث التلقائية - فقط نستخدم الخدمة للأوامر اليدوية
+        val event = event ?: return
+
+        // نستمع فقط لتغييرات المحتوى وظهور نوافذ جديدة
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+
+        // إذا لا توجد مهام انتظار نتجاهل الحدث فوراً
+        val tasks = synchronized(waitTasks) { waitTasks.toList() }
+        if (tasks.isEmpty()) return
+
+        // نقرأ نص الشاشة مرة واحدة ونفحص كل المهام
+        val screenText = getScreenText().lowercase()
+
+        val toRemove = mutableListOf<WaitTask>()
+
+        for (task in tasks) {
+            val found = screenText.contains(task.targetText.lowercase())
+            val conditionMet = if (task.waitForShow) found else !found
+
+            if (conditionMet) {
+                toRemove.add(task)
+                Log.d(TAG, "✅ تحقق الشرط #${task.id}: \"${task.targetText}\"")
+                mainHandler.post { task.onFound() }
+            }
+        }
+
+        if (toRemove.isNotEmpty()) {
+            synchronized(waitTasks) { waitTasks.removeAll(toRemove.toSet()) }
+        }
     }
 
     override fun onInterrupt() {
         Log.d(TAG, "Service interrupted")
+        cancelAllWaitTasks()
     }
 
     override fun onServiceConnected() {
@@ -28,6 +124,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelAllWaitTasks()
         instance = null
         Log.d(TAG, "Accessibility Service destroyed")
     }
