@@ -666,10 +666,14 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
 
+                // حل اسم التطبيق: أسماء مخصصة أولاً ثم الخريطة الثابتة
+                val resolvedPackage = step.packageName?.let { resolveAppPackage(it) }
+
                 service.registerWaitTask(
                     targetText  = step.targetText,
                     waitForShow = step.waitForShow,
                     timeoutMs   = step.timeoutSec * 1000L,
+                    packageName = resolvedPackage,
                     onFound = {
                         addBotMessage("✅ ظهر [${step.targetText}]")
                         if (step.onFound != null) {
@@ -695,6 +699,26 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * يحل اسم التطبيق إلى package name
+     * يبحث في الأسماء المخصصة أولاً ثم الخريطة الثابتة في StepEngine
+     */
+    private fun resolveAppPackage(nameOrPackage: String): String {
+        val lower = nameOrPackage.lowercase().trim()
+
+        // 1) إذا يبدو كـ package name فعلي (يحتوي نقطة) → استخدمه مباشرة
+        if (lower.contains(".")) return nameOrPackage
+
+        // 2) ابحث في الأسماء المخصصة (packageName → [أسماء])
+        val customNames = AppNamesActivity.getCustomNames(this)
+        for ((pkg, names) in customNames) {
+            if (names.any { it.lowercase() == lower }) return pkg
+        }
+
+        // 3) ابحث في الخريطة الثابتة
+        return StepEngine.resolvePackage(nameOrPackage)
     }
 
     /**
