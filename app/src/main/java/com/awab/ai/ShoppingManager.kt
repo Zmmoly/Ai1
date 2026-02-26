@@ -3,36 +3,167 @@ package com.awab.ai
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Locale
 
-/**
- * نموذج عنصر في قائمة التسوق
- */
+// ===== النماذج =====
+
 data class ShoppingItem(
-    val name: String,           // اسم المنتج
-    val pricePerUnit: Double,   // سعر الوحدة أو الكيلو
-    val quantity: Double,       // الكمية أو الوزن
-    val total: Double,          // الإجمالي = السعر × الكمية
-    val priceSource: String,    // "ذاكرة" أو "مدخل" أو "وزن"
+    val name: String,
+    val pricePerUnit: Double,
+    val quantity: Double,
+    val total: Double,
+    val priceSource: String,
+    val sessionId: String,         // ينتمي لأي جلسة
     val timestamp: Long = System.currentTimeMillis()
 )
 
-/**
- * نتيجة تحليل جملة "اشتريت ..."
- */
+data class ShoppingSession(
+    val id: String,                // معرف فريد
+    val budget: Double,            // 0 = ميزانية عامة
+    val startTime: Long,
+    val endTime: Long?,            // null = جلسة مفتوحة
+    val label: String              // "ميزانية عامة" أو "جلسة X"
+)
+
 data class ParsedPurchase(
     val itemName: String,
-    val explicitPrice: Double?,   // سعر مذكور صراحةً (اشتريت X بـ 10)
-    val quantity: Double?,        // كمية أو وزن مذكور (اشتريت X كيلو 2)
-    val isWeightBased: Boolean    // هل الرقم يمثل وزناً أو كمية؟
+    val explicitPrice: Double?,
+    val quantity: Double?,
+    val isWeightBased: Boolean
 )
 
 object ShoppingManager {
 
-    private const val PREFS_NAME = "shopping_prefs"
-    private const val KEY_ITEMS  = "shopping_items"
-    private const val KEY_BUDGET = "shopping_budget"
+    private const val PREFS_NAME       = "shopping_prefs"
+    private const val KEY_ITEMS        = "shopping_items"
+    private const val KEY_SESSIONS     = "shopping_sessions"
+    private const val KEY_ACTIVE_SESSION = "active_session_id"
+    private const val GENERAL_SESSION_ID = "general"
 
-    // ===== حفظ وتحميل القائمة =====
+    // ===== الجلسات =====
+
+    fun saveSessions(context: Context, sessions: List<ShoppingSession>) {
+        val arr = JSONArray()
+        for (s in sessions) {
+            arr.put(JSONObject().apply {
+                put("id",        s.id)
+                put("budget",    s.budget)
+                put("startTime", s.startTime)
+                put("endTime",   s.endTime ?: -1L)
+                put("label",     s.label)
+            })
+        }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_SESSIONS, arr.toString()).apply()
+    }
+
+    fun loadSessions(context: Context): MutableList<ShoppingSession> {
+        val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_SESSIONS, "[]") ?: "[]"
+        val result = mutableListOf<ShoppingSession>()
+        try {
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                result.add(ShoppingSession(
+                    id        = obj.getString("id"),
+                    budget    = obj.getDouble("budget"),
+                    startTime = obj.getLong("startTime"),
+                    endTime   = obj.getLong("endTime").takeIf { it >= 0 },
+                    label     = obj.getString("label")
+                ))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        return result
+    }
+
+    fun getActiveSessionId(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ACTIVE_SESSION, GENERAL_SESSION_ID) ?: GENERAL_SESSION_ID
+    }
+
+    fun setActiveSessionId(context: Context, id: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_ACTIVE_SESSION, id).apply()
+    }
+
+    /**
+     * يبدأ جلسة جديدة بميزانية محددة
+     * يُرجع الجلسة الجديدة
+     */
+    fun startNewSession(context: Context, budget: Double): ShoppingSession {
+        val sessions = loadSessions(context)
+
+        // أغلق الجلسة المفتوحة السابقة إن وجدت
+        val activeId = getActiveSessionId(context)
+        val updated = sessions.map {
+            if (it.id == activeId && it.endTime == null && it.id != GENERAL_SESSION_ID)
+                it.copy(endTime = System.currentTimeMillis())
+            else it
+        }.toMutableList()
+
+        // أنشئ جلسة جديدة
+        val sessionNumber = updated.count { it.id != GENERAL_SESSION_ID } + 1
+        val newSession = ShoppingSession(
+            id        = "session_${System.currentTimeMillis()}",
+            budget    = budget,
+            startTime = System.currentTimeMillis(),
+            endTime   = null,
+            label     = "جلسة $sessionNumber"
+        )
+
+        // تأكد من وجود الجلسة العامة
+        if (updated.none { it.id == GENERAL_SESSION_ID }) {
+            updated.add(0, ShoppingSession(
+                id        = GENERAL_SESSION_ID,
+                budget    = 0.0,
+                startTime = 0L,
+                endTime   = null,
+                label     = "ميزانية عامة"
+            ))
+        }
+
+        updated.add(newSession)
+        saveSessions(context, updated)
+        setActiveSessionId(context, newSession.id)
+        return newSession
+    }
+
+    /**
+     * ينهي الجلسة الحالية ويرجع للميزانية العامة
+     */
+    fun endActiveSession(context: Context): ShoppingSession? {
+        val sessions  = loadSessions(context)
+        val activeId  = getActiveSessionId(context)
+        if (activeId == GENERAL_SESSION_ID) return null
+
+        val session = sessions.find { it.id == activeId } ?: return null
+        val updated = sessions.map {
+            if (it.id == activeId) it.copy(endTime = System.currentTimeMillis()) else it
+        }
+        saveSessions(context, updated)
+        setActiveSessionId(context, GENERAL_SESSION_ID)
+        return session
+    }
+
+    /** يتأكد من وجود الجلسة العامة */
+    private fun ensureGeneralSession(context: Context) {
+        val sessions = loadSessions(context)
+        if (sessions.none { it.id == GENERAL_SESSION_ID }) {
+            val updated = sessions.toMutableList()
+            updated.add(0, ShoppingSession(
+                id        = GENERAL_SESSION_ID,
+                budget    = 0.0,
+                startTime = 0L,
+                endTime   = null,
+                label     = "ميزانية عامة"
+            ))
+            saveSessions(context, updated)
+        }
+    }
+
+    // ===== العناصر =====
 
     fun saveItems(context: Context, items: List<ShoppingItem>) {
         val arr = JSONArray()
@@ -43,6 +174,7 @@ object ShoppingManager {
                 put("quantity",     item.quantity)
                 put("total",        item.total)
                 put("priceSource",  item.priceSource)
+                put("sessionId",    item.sessionId)
                 put("timestamp",    item.timestamp)
             })
         }
@@ -64,6 +196,7 @@ object ShoppingManager {
                     quantity     = obj.getDouble("quantity"),
                     total        = obj.getDouble("total"),
                     priceSource  = obj.optString("priceSource", "مدخل"),
+                    sessionId    = obj.optString("sessionId", GENERAL_SESSION_ID),
                     timestamp    = obj.optLong("timestamp", 0)
                 ))
             }
@@ -71,61 +204,41 @@ object ShoppingManager {
         return result
     }
 
-    fun clearItems(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(KEY_ITEMS).apply()
-    }
-
-    // ===== الميزانية =====
-
-    fun saveBudget(context: Context, amount: Double) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putFloat(KEY_BUDGET, amount.toFloat()).apply()
-    }
-
-    fun loadBudget(context: Context): Double {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getFloat(KEY_BUDGET, 0f).toDouble()
-    }
-
-    // ===== إجمالي المشتريات =====
-
-    fun getTotal(context: Context): Double =
-        loadItems(context).sumOf { it.total }
-
-    fun getRemaining(context: Context): Double {
-        val budget = loadBudget(context)
-        return if (budget > 0) budget - getTotal(context) else 0.0
-    }
-
-    // ===== إضافة عنصر =====
-
     fun addItem(context: Context, item: ShoppingItem) {
+        ensureGeneralSession(context)
         val items = loadItems(context)
         items.add(item)
         saveItems(context, items)
     }
 
-    // ===== تحليل جملة "اشتريت ..." =====
+    fun clearItems(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_ITEMS).remove(KEY_SESSIONS).remove(KEY_ACTIVE_SESSION).apply()
+    }
 
-    /**
-     * يحلل الجملة ويُرجع ParsedPurchase
-     *
-     * القواعد:
-     * - "بـ X" أو "ب X"           → سعر الوحدة
-     * - "X شيء" (رقم قبل الاسم)  → كمية (قطع)
-     * - "شيء" بدون رقم أو بـ      → يبحث في الذاكرة، إذا ما لقى يسأل
-     */
+    // ===== الإجماليات =====
+
+    fun getSessionTotal(context: Context, sessionId: String): Double =
+        loadItems(context).filter { it.sessionId == sessionId }.sumOf { it.total }
+
+    fun getTotal(context: Context): Double = loadItems(context).sumOf { it.total }
+
+    // ===== الجلسة الحالية =====
+
+    fun getActiveSession(context: Context): ShoppingSession? {
+        val id = getActiveSessionId(context)
+        return loadSessions(context).find { it.id == id }
+    }
+
+    // ===== تحليل الشراء =====
+
     fun parsePurchase(input: String): ParsedPurchase? {
         val lower = input.lowercase().trim()
-
         val triggers = listOf("اشتريت", "أخذت", "اخذت", "جبت", "حصلت على", "شريت")
         val trigger = triggers.firstOrNull { lower.startsWith(it) } ?: return null
         val rest = lower.removePrefix(trigger).trim()
-
         if (rest.isBlank()) return null
 
-        // 1) استخراج السعر: "بـ X" أو "ب X" أو "بسعر X"
         var explicitPrice: Double? = null
         var workingText = rest
 
@@ -136,7 +249,6 @@ object ShoppingManager {
             workingText = workingText.substring(0, priceMatch.range.first).trim()
         }
 
-        // 2) استخراج الكمية: رقم في البداية فقط "3 تفاح"
         var quantity: Double? = null
         var itemName: String
 
@@ -146,7 +258,6 @@ object ShoppingManager {
             quantity = qf.groupValues[1].toDoubleOrNull()
             itemName = qf.groupValues[2].trim()
         } else {
-            // لا يوجد رقم في البداية → الكل هو الاسم
             itemName = workingText.trim()
         }
 
@@ -160,30 +271,19 @@ object ShoppingManager {
         )
     }
 
-    /**
-     * يحوّل ParsedPurchase + سعر الذاكرة → ShoppingItem
-     * يُرجع null إذا لم يُعرف السعر
-     */
-    fun buildItem(
-        parsed: ParsedPurchase,
-        memoryPrice: Double?
-    ): ShoppingItem? {
-
+    fun buildItem(parsed: ParsedPurchase, memoryPrice: Double?, sessionId: String): ShoppingItem? {
         val pricePerUnit: Double
         val priceSource: String
 
         when {
-            // السعر مذكور صراحةً
             parsed.explicitPrice != null -> {
                 pricePerUnit = parsed.explicitPrice
                 priceSource  = "مدخل"
             }
-            // السعر من الذاكرة
             memoryPrice != null -> {
                 pricePerUnit = memoryPrice
                 priceSource  = "ذاكرة"
             }
-            // لا يوجد سعر
             else -> return null
         }
 
@@ -195,30 +295,23 @@ object ShoppingManager {
             pricePerUnit = pricePerUnit,
             quantity     = qty,
             total        = total,
-            priceSource  = priceSource
+            priceSource  = priceSource,
+            sessionId    = sessionId
         )
     }
 
     // ===== البحث بالتاريخ =====
 
-    /**
-     * يُرجع المشتريات في يوم محدد
-     * @param dayStart بداية اليوم بالميلي ثانية
-     * @param dayEnd   نهاية اليوم بالميلي ثانية
-     */
-    fun getItemsByDate(context: Context, dayStart: Long, dayEnd: Long): List<ShoppingItem> {
-        return loadItems(context).filter { it.timestamp in dayStart..dayEnd }
-    }
+    fun getItemsByDate(context: Context, dayStart: Long, dayEnd: Long): List<ShoppingItem> =
+        loadItems(context).filter { it.timestamp in dayStart..dayEnd }
 
-    /**
-     * يحلل نص التاريخ ويُرجع (بداية اليوم، نهاية اليوم)
-     * يدعم: اليوم، امس، أول امس، يوم الاثنين...الجمعة، تاريخ رقمي 20/3
-     */
+    fun getSessionsByDate(context: Context, dayStart: Long, dayEnd: Long): List<ShoppingSession> =
+        loadSessions(context).filter { it.startTime in dayStart..dayEnd || it.id == GENERAL_SESSION_ID }
+
     fun parseDate(input: String): Pair<Long, Long>? {
         val lower = input.lowercase().trim()
         val cal   = java.util.Calendar.getInstance()
 
-        // اضبط لبداية اليوم
         fun startOfDay(c: java.util.Calendar): Long {
             c.set(java.util.Calendar.HOUR_OF_DAY, 0)
             c.set(java.util.Calendar.MINUTE, 0)
@@ -226,52 +319,38 @@ object ShoppingManager {
             c.set(java.util.Calendar.MILLISECOND, 0)
             return c.timeInMillis
         }
-        fun endOfDay(start: Long) = start + 86_399_999L  // +23:59:59.999
+        fun endOfDay(start: Long) = start + 86_399_999L
 
-        // اليوم
         if (lower.contains("اليوم")) {
-            val s = startOfDay(cal)
-            return Pair(s, endOfDay(s))
+            val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
-
-        // امس
         if (lower.contains("امس") || lower.contains("أمس")) {
             cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
-            val s = startOfDay(cal)
-            return Pair(s, endOfDay(s))
+            val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
-
-        // أول امس
         if (lower.contains("أول امس") || lower.contains("اول امس")) {
             cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
-            val s = startOfDay(cal)
-            return Pair(s, endOfDay(s))
+            val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
 
-        // أيام الأسبوع
         val dayNames = mapOf(
-            "الأحد"    to java.util.Calendar.SUNDAY,
-            "الاحد"    to java.util.Calendar.SUNDAY,
-            "الاثنين"  to java.util.Calendar.MONDAY,
+            "الأحد" to java.util.Calendar.SUNDAY, "الاحد" to java.util.Calendar.SUNDAY,
+            "الاثنين" to java.util.Calendar.MONDAY,
             "الثلاثاء" to java.util.Calendar.TUESDAY,
-            "الأربعاء" to java.util.Calendar.WEDNESDAY,
-            "الاربعاء" to java.util.Calendar.WEDNESDAY,
-            "الخميس"   to java.util.Calendar.THURSDAY,
-            "الجمعة"   to java.util.Calendar.FRIDAY,
-            "السبت"    to java.util.Calendar.SATURDAY
+            "الأربعاء" to java.util.Calendar.WEDNESDAY, "الاربعاء" to java.util.Calendar.WEDNESDAY,
+            "الخميس" to java.util.Calendar.THURSDAY,
+            "الجمعة" to java.util.Calendar.FRIDAY,
+            "السبت" to java.util.Calendar.SATURDAY
         )
         for ((name, dayOfWeek) in dayNames) {
             if (lower.contains(name)) {
-                // ارجع للخلف حتى نجد هذا اليوم
                 var diff = cal.get(java.util.Calendar.DAY_OF_WEEK) - dayOfWeek
                 if (diff <= 0) diff += 7
                 cal.add(java.util.Calendar.DAY_OF_YEAR, -diff)
-                val s = startOfDay(cal)
-                return Pair(s, endOfDay(s))
+                val s = startOfDay(cal); return Pair(s, endOfDay(s))
             }
         }
 
-        // تاريخ رقمي: "20/3" أو "20/3/2025"
         val datePattern = Regex("(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?")
         datePattern.find(lower)?.let { m ->
             val day   = m.groupValues[1].toIntOrNull() ?: return null
@@ -280,19 +359,88 @@ object ShoppingManager {
                 ?.let { if (it < 100) 2000 + it else it }
                 ?: cal.get(java.util.Calendar.YEAR)
             cal.set(year, month - 1, day)
-            val s = startOfDay(cal)
-            return Pair(s, endOfDay(s))
+            val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
 
         return null
     }
 
-    /** يُنسّق فاتورة ليوم محدد */
+    // ===== التنسيق =====
+
+    private val timeFmt = SimpleDateFormat("hh:mm a", Locale("ar"))
+
+    /** يعرض كل جلسات يوم معين كل واحدة في جدول منفصل */
     fun formatDateReceipt(context: Context, items: List<ShoppingItem>, dateLabel: String): String {
         if (items.isEmpty()) return "🛒 لم تشتري شيئاً $dateLabel"
 
+        val sessions = loadSessions(context)
+        val sb = StringBuilder()
+
+        // جمّع العناصر حسب الجلسة
+        val bySession = items.groupBy { it.sessionId }
+
+        // رتّب الجلسات بالوقت
+        val sortedSessions = bySession.keys.mapNotNull { sid ->
+            sessions.find { it.id == sid } ?: if (sid == GENERAL_SESSION_ID)
+                ShoppingSession(GENERAL_SESSION_ID, 0.0, 0L, null, "ميزانية عامة")
+            else null
+        }.sortedBy { it.startTime }
+
+        sortedSessions.forEachIndexed { index, session ->
+            val sessionItems = bySession[session.id] ?: return@forEachIndexed
+            val total = sessionItems.sumOf { it.total }
+
+            if (index > 0) sb.appendLine()
+
+            // رأس الجلسة
+            if (session.id == GENERAL_SESSION_ID) {
+                sb.appendLine("📦 الميزانية العامة")
+            } else {
+                val timeStr = timeFmt.format(java.util.Date(session.startTime))
+                sb.appendLine("🛒 ${session.label} ($timeStr)")
+                if (session.budget > 0) sb.appendLine("💼 الميزانية: ${formatNum(session.budget)} ر")
+            }
+            sb.appendLine("─────────────────")
+
+            sessionItems.forEachIndexed { i, item ->
+                val qtyStr = if (item.quantity != 1.0) " × ${formatNum(item.quantity)}" else ""
+                val src    = if (item.priceSource == "ذاكرة") " 🧠" else ""
+                sb.appendLine("${i + 1}. ${item.name}$qtyStr = ${formatNum(item.total)} ر$src")
+            }
+
+            sb.appendLine("─────────────────")
+            sb.append("💰 الإجمالي: ${formatNum(total)} ر")
+
+            if (session.budget > 0) {
+                val remaining = session.budget - total
+                if (remaining >= 0) sb.append(" | ✅ الباقي: ${formatNum(remaining)} ر")
+                else sb.append(" | ⚠️ تجاوزت بـ ${formatNum(-remaining)} ر")
+            }
+            sb.appendLine()
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    /** يعرض الجلسة الحالية المفتوحة */
+    fun formatCurrentSession(context: Context): String {
+        val session = getActiveSession(context)
+        val sessionId = getActiveSessionId(context)
+        val items = loadItems(context).filter { it.sessionId == sessionId }
         val total = items.sumOf { it.total }
-        val sb    = StringBuilder("🛒 مشتريات $dateLabel:\n")
+
+        if (items.isEmpty()) return "🛒 قائمة التسوق فارغة."
+
+        val sb = StringBuilder()
+
+        if (sessionId == GENERAL_SESSION_ID) {
+            sb.appendLine("📦 الميزانية العامة")
+        } else {
+            sb.appendLine("🛒 ${session?.label ?: "الجلسة الحالية"}")
+            if ((session?.budget ?: 0.0) > 0)
+                sb.appendLine("💼 الميزانية: ${formatNum(session!!.budget)} ر")
+        }
+
         sb.appendLine("─────────────────")
         items.forEachIndexed { i, item ->
             val qtyStr = if (item.quantity != 1.0) " × ${formatNum(item.quantity)}" else ""
@@ -301,37 +449,12 @@ object ShoppingManager {
         }
         sb.appendLine("─────────────────")
         sb.append("💰 الإجمالي: ${formatNum(total)} ر")
-        return sb.toString()
-    }
 
-    fun formatReceipt(context: Context): String {
-        val items   = loadItems(context)
-        val budget  = loadBudget(context)
-        val total   = getTotal(context)
-
-        if (items.isEmpty()) return "🛒 قائمة التسوق فارغة."
-
-        val sb = StringBuilder("🛒 قائمة المشتريات:\n")
-        sb.appendLine("─────────────────")
-        items.forEachIndexed { i, item ->
-            val qtyStr = if (item.quantity != 1.0) {
-                if (item.priceSource == "وزن" || item.quantity < 10)
-                    " × ${formatNum(item.quantity)}"
-                else " × ${formatNum(item.quantity)}"
-            } else ""
-            val sourceTag = if (item.priceSource == "ذاكرة") " 🧠" else ""
-            sb.appendLine("${i + 1}. ${item.name}$qtyStr = ${formatNum(item.total)} ر$sourceTag")
-        }
-        sb.appendLine("─────────────────")
-        sb.appendLine("💰 الإجمالي: ${formatNum(total)} ر")
-
+        val budget = session?.budget ?: 0.0
         if (budget > 0) {
             val remaining = budget - total
-            if (remaining >= 0) {
-                sb.appendLine("✅ الباقي: ${formatNum(remaining)} ر")
-            } else {
-                sb.appendLine("⚠️ تجاوزت الميزانية بـ ${formatNum(-remaining)} ر")
-            }
+            if (remaining >= 0) sb.append(" | ✅ الباقي: ${formatNum(remaining)} ر")
+            else sb.append(" | ⚠️ تجاوزت بـ ${formatNum(-remaining)} ر")
         }
 
         return sb.toString().trimEnd()
