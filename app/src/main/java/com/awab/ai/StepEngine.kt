@@ -49,7 +49,8 @@ sealed class Step {
         val waitForShow: Boolean,
         val timeoutSec: Int,
         val onFound: String?,
-        val onTimeout: String?
+        val onTimeout: String?,
+        val packageName: String? = null   // null = التطبيق الحالي تلقائياً
     ) : Step()
 }
 
@@ -74,12 +75,12 @@ object StepEngine {
         // انتظار ظهور/اختفاء عنصر
         // صيغ:
         //   انتظر ظهور [تخطي]
-        //   انتظر ظهور [تخطي] ثم اضغط على تخطي
-        //   انتظر ظهور [تخطي] لمدة 20 ثانية ثم اضغط على تخطي
-        //   انتظر ظهور [تخطي] لمدة 10 ثانية وإلا رجوع
-        //   انتظر اختفاء [جاري التحميل] ثم اضغط على ابدأ
+        //   انتظر ظهور [تخطي] في يوتيوب
+        //   انتظر ظهور [تخطي] في يوتيوب لمدة 10 ثانية ثم اضغط على تخطي وإلا رجوع
+        //   انتظر اختفاء [جاري التحميل] في واتساب ثم اضغط على ابدأ
         val waitRegex = Regex(
             "^انتظر\\s+(ظهور|اختفاء)\\s+\\[(.+?)\\]" +
+            "(?:\\s+في\\s+([\\w\\u0600-\\u06FF]+))?" +
             "(?:\\s+لمدة\\s+(\\d+)\\s*(?:ثانية|ثواني|ث))?" +
             "(?:\\s+ثم\\s+(.+?))?" +
             "(?:\\s+وإلا\\s+(.+))?$",
@@ -88,10 +89,12 @@ object StepEngine {
         waitRegex.matchEntire(t)?.let { m ->
             val waitForShow = m.groupValues[1] == "ظهور"
             val target      = m.groupValues[2].trim()
-            val timeout     = m.groupValues[3].toIntOrNull() ?: 15
-            val onFound     = m.groupValues[4].trim().takeIf { it.isNotBlank() }
-            val onTimeout   = m.groupValues[5].trim().takeIf { it.isNotBlank() }
-            return Step.Wait(target, waitForShow, timeout, onFound, onTimeout)
+            val appName     = m.groupValues[3].trim().takeIf { it.isNotBlank() }
+            val timeout     = m.groupValues[4].toIntOrNull() ?: 15
+            val onFound     = m.groupValues[5].trim().takeIf { it.isNotBlank() }
+            val onTimeout   = m.groupValues[6].trim().takeIf { it.isNotBlank() }
+            val pkg         = appName?.let { resolvePackage(it) }
+            return Step.Wait(target, waitForShow, timeout, onFound, onTimeout, pkg)
         }
 
         // شرط
@@ -187,6 +190,55 @@ object StepEngine {
         return screenText.contains(lower)
     }
 
+    // ─── خريطة أسماء التطبيقات ─────────────
+
+    private val appPackageMap = mapOf(
+        "يوتيوب"      to "com.google.android.youtube",
+        "youtube"     to "com.google.android.youtube",
+        "واتساب"      to "com.whatsapp",
+        "whatsapp"    to "com.whatsapp",
+        "انستقرام"    to "com.instagram.android",
+        "instagram"   to "com.instagram.android",
+        "سناب"        to "com.snapchat.android",
+        "سناب شات"    to "com.snapchat.android",
+        "snapchat"    to "com.snapchat.android",
+        "تيك توك"     to "com.zhiliaoapp.musically",
+        "tiktok"      to "com.zhiliaoapp.musically",
+        "تويتر"       to "com.twitter.android",
+        "twitter"     to "com.twitter.android",
+        "اكس"         to "com.twitter.android",
+        "x"           to "com.twitter.android",
+        "فيسبوك"      to "com.facebook.katana",
+        "facebook"    to "com.facebook.katana",
+        "تيليقرام"    to "org.telegram.messenger",
+        "تيليغرام"    to "org.telegram.messenger",
+        "telegram"    to "org.telegram.messenger",
+        "كروم"        to "com.android.chrome",
+        "chrome"      to "com.android.chrome",
+        "جوجل"        to "com.google.android.googlequicksearchbox",
+        "google"      to "com.google.android.googlequicksearchbox",
+        "الاعدادات"   to "com.android.settings",
+        "الإعدادات"   to "com.android.settings",
+        "settings"    to "com.android.settings",
+        "نتفليكس"     to "com.netflix.mediaclient",
+        "netflix"     to "com.netflix.mediaclient",
+        "سبوتيفاي"    to "com.spotify.music",
+        "spotify"     to "com.spotify.music",
+        "جيميل"       to "com.google.android.gm",
+        "gmail"       to "com.google.android.gm",
+        "خرائط"       to "com.google.android.apps.maps",
+        "maps"        to "com.google.android.apps.maps"
+    )
+
+    /**
+     * يحوّل اسم التطبيق بالعربي أو الإنجليزي إلى package name
+     * إذا لم يجده في الخريطة يعتبر النص نفسه package name
+     */
+    fun resolvePackage(appName: String): String {
+        val lower = appName.lowercase().trim()
+        return appPackageMap[lower] ?: appName
+    }
+
     // ─── وصف مقروء ─────────────────────────
 
     fun describe(step: Step, indent: String = ""): String = when (step) {
@@ -210,8 +262,12 @@ object StepEngine {
         }.trimEnd()
 
         is Step.Wait -> buildString {
-            val dir = if (step.waitForShow) "ظهور" else "اختفاء"
-            append("$indent⏳ انتظر $dir [${step.targetText}] لمدة ${step.timeoutSec}ث")
+            val dir    = if (step.waitForShow) "ظهور" else "اختفاء"
+            val appStr = step.packageName?.let {
+                val name = appPackageMap.entries.firstOrNull { e -> e.value == it }?.key ?: it
+                " في $name"
+            } ?: ""
+            append("$indent⏳ انتظر $dir [${step.targetText}]$appStr لمدة ${step.timeoutSec}ث")
             step.onFound?.let   { append(" ثم $it") }
             step.onTimeout?.let { append(" وإلا $it") }
         }
@@ -232,14 +288,15 @@ object StepEngine {
 🔁 حلقة:
   كرر 3 مرات → على الصوت
 
-⏳ انتظار ظهور عنصر:
+⏳ انتظار ظهور عنصر (التطبيق الحالي تلقائياً):
   انتظر ظهور [تخطي]
   انتظر ظهور [تخطي] ثم اضغط على تخطي
   انتظر ظهور [تخطي] لمدة 10 ثانية ثم اضغط على تخطي وإلا رجوع
 
-⏳ انتظار اختفاء عنصر:
-  انتظر اختفاء [جاري التحميل] ثم اضغط على ابدأ
-  انتظر اختفاء [إعلان] لمدة 15 ثانية ثم اضغط على تخطي
+⏳ انتظار مع تحديد التطبيق:
+  انتظر ظهور [تخطي] في يوتيوب ثم اضغط على تخطي
+  انتظر ظهور [قبول] في واتساب لمدة 15 ثانية ثم اضغط على قبول
+  انتظر اختفاء [جاري التحميل] في انستقرام ثم اضغط على ابدأ
 
 🔗 شروط مركبة:
   إذا تحتوي A و تحتوي B → أمر
