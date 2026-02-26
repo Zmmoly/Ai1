@@ -185,6 +185,16 @@ class MainActivity : AppCompatActivity() {
         if (message.isEmpty()) return
         addUserMessage(message)
         inputField.text.clear()
+
+        // أبلغ الخدمة بالنص النهائي لتسمية ملف التسجيل
+        if (isRecording) {
+            val intent = Intent(this, AudioRecordingService::class.java).apply {
+                action = AudioRecordingService.ACTION_RENAME_LAST
+                putExtra(AudioRecordingService.EXTRA_FINAL_TEXT, message)
+            }
+            startService(intent)
+        }
+
         android.os.Handler(mainLooper).postDelayed({ handleBotResponse(message) }, 500)
     }
 
