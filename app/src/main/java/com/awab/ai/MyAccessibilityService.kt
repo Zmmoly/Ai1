@@ -44,18 +44,31 @@ class MyAccessibilityService : AccessibilityService() {
         targetText: String,
         waitForShow: Boolean = true,
         timeoutMs: Long = 10_000L,
+        packageName: String? = null,   // null = التطبيق الحالي تلقائياً
         onFound: () -> Unit,
         onTimeout: () -> Unit = {}
     ): Int {
         val id = nextTaskId++
         val task = WaitTask(id, targetText, waitForShow, timeoutMs, onFound, onTimeout)
 
-        synchronized(waitTasks) { waitTasks.add(task) }
+        synchronized(waitTasks) {
+            waitTasks.add(task)
+            hasActiveTasks.set(true)
+        }
+
+        // استخدم packageName المحدد أو التطبيق الحالي تلقائياً
+        val pkg = packageName ?: rootInActiveWindow?.packageName?.toString() ?: ""
+        setListenPackage(pkg)
 
         // ضبط timeout إذا كانت المهلة محددة
         if (timeoutMs > 0) {
             mainHandler.postDelayed({
-                val removed = synchronized(waitTasks) { waitTasks.removeAll { it.id == id } }
+                val removed = synchronized(waitTasks) {
+                    val r = waitTasks.removeAll { it.id == id }
+                    hasActiveTasks.set(waitTasks.isNotEmpty())
+                    if (waitTasks.isEmpty()) setListenPackage(null)
+                    r
+                }
                 if (removed) {
                     Log.d(TAG, "⏰ انتهت مهلة انتظار: \"$targetText\"")
                     onTimeout()
@@ -63,52 +76,80 @@ class MyAccessibilityService : AccessibilityService() {
             }, timeoutMs)
         }
 
-        Log.d(TAG, "⏳ مهمة انتظار #$id: \"$targetText\" (${if (waitForShow) "ظهور" else "اختفاء"})")
+        Log.d(TAG, "⏳ مهمة انتظار #$id: \"$targetText\" في $pkg")
         return id
     }
 
     /** إلغاء مهمة انتظار بالـ ID */
     fun cancelWaitTask(id: Int) {
-        synchronized(waitTasks) { waitTasks.removeAll { it.id == id } }
+        synchronized(waitTasks) {
+            waitTasks.removeAll { it.id == id }
+            hasActiveTasks.set(waitTasks.isNotEmpty())
+        }
     }
 
     /** إلغاء جميع مهام الانتظار */
     fun cancelAllWaitTasks() {
-        synchronized(waitTasks) { waitTasks.clear() }
+        synchronized(waitTasks) {
+            waitTasks.clear()
+            hasActiveTasks.set(false)
+        }
     }
 
     // ===== معالجة أحداث الشاشة =====
 
+    private val hasActiveTasks = java.util.concurrent.atomic.AtomicBoolean(false)
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val event = event ?: return
+        val ev = event ?: return
 
-        // نستمع فقط لتغييرات المحتوى وظهور نوافذ جديدة
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        // نستمع فقط لظهور عناصر جديدة
+        if (ev.eventType != AccessibilityEvent.TYPE_VIEW_APPEARED) return
 
-        // إذا لا توجد مهام انتظار نتجاهل الحدث فوراً
+        // فلتر سريع
+        if (!hasActiveTasks.get()) return
+
+        // نقرأ نص العنصر الذي ظهر مباشرة من الحدث — بدون getScreenText()
+        val appearedText = ev.text.joinToString(" ").lowercase().trim()
+        if (appearedText.isBlank()) return
+
         val tasks = synchronized(waitTasks) { waitTasks.toList() }
         if (tasks.isEmpty()) return
-
-        // نقرأ نص الشاشة مرة واحدة ونفحص كل المهام
-        val screenText = getScreenText().lowercase()
 
         val toRemove = mutableListOf<WaitTask>()
 
         for (task in tasks) {
-            val found = screenText.contains(task.targetText.lowercase())
-            val conditionMet = if (task.waitForShow) found else !found
-
-            if (conditionMet) {
+            if (!task.waitForShow) continue  // "اختفاء" لا ينطبق هنا
+            if (appearedText.contains(task.targetText.lowercase())) {
                 toRemove.add(task)
-                Log.d(TAG, "✅ تحقق الشرط #${task.id}: \"${task.targetText}\"")
+                Log.d(TAG, "✅ ظهر العنصر #${task.id}: \"${task.targetText}\"")
                 mainHandler.post { task.onFound() }
             }
         }
 
         if (toRemove.isNotEmpty()) {
-            synchronized(waitTasks) { waitTasks.removeAll(toRemove.toSet()) }
+            synchronized(waitTasks) {
+                waitTasks.removeAll(toRemove.toSet())
+                hasActiveTasks.set(waitTasks.isNotEmpty())
+                // إذا انتهت كل المهام → ارجع للوضع الصامت
+                if (waitTasks.isEmpty()) setListenPackage(null)
+            }
         }
+    }
+
+    /**
+     * يضبط التطبيق الذي نستمع له
+     * null = لا نستمع لأحد (وضع صامت)
+     */
+    private fun setListenPackage(packageName: String?) {
+        val info = serviceInfo ?: return
+        info.eventTypes = if (packageName != null)
+            AccessibilityEvent.TYPE_VIEW_APPEARED
+        else
+            0  // لا نستمع لأي حدث
+        info.packageNames = if (packageName != null) arrayOf(packageName) else arrayOf("com.awab.ai")
+        serviceInfo = info
+        Log.d(TAG, if (packageName != null) "👂 أستمع لـ $packageName" else "🔇 وضع صامت")
     }
 
     override fun onInterrupt() {
@@ -119,6 +160,7 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        setListenPackage(null)  // ابدأ في وضع صامت
         Log.d(TAG, "Accessibility Service connected")
     }
 
