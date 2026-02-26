@@ -104,7 +104,7 @@ class MyAccessibilityService : AccessibilityService() {
         val ev = event ?: return
 
         // نستمع لتغييرات النافذة وظهور نوافذ جديدة (متوافق مع كل الإصدارات)
-        if (ev.eventType != AccessibilityEvent.TYPE_VIEW_APPEARED) return
+        if (ev.eventType != 0x20000000) return
 
         // فلتر سريع
         if (!hasActiveTasks.get()) return
@@ -143,7 +143,7 @@ class MyAccessibilityService : AccessibilityService() {
     private fun setListenPackage(packageName: String?) {
         val info = serviceInfo ?: return
         info.eventTypes = if (packageName != null)
-            AccessibilityEvent.TYPE_VIEW_APPEARED
+            0x20000000  // TYPE_VIEW_APPEARED (API 35)
         else
             0
         info.packageNames = if (packageName != null) arrayOf(packageName) else arrayOf("com.awab.ai")
@@ -481,3 +481,4 @@ class MyAccessibilityService : AccessibilityService() {
         fun isEnabled(): Boolean = instance != null
     }
 }
+ 
