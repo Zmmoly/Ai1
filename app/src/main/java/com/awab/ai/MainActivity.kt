@@ -653,6 +653,47 @@ class MainActivity : AppCompatActivity() {
                 addBotMessage("🔁 حلقة تكرار × ${step.times}")
                 executeLoopBody(step.body, step.times, 0, delayMs, onDone)
             }
+
+            // ── انتظار حدث ──────────────────────────
+            is Step.Wait -> {
+                val dir = if (step.waitForShow) "ظهور" else "اختفاء"
+                addBotMessage("⏳ انتظار $dir [${step.targetText}] (مهلة: ${step.timeoutSec}ث)...")
+
+                val service = MyAccessibilityService.getInstance()
+                if (service == null) {
+                    addBotMessage("⚠️ خدمة إمكانية الوصول غير مفعّلة")
+                    onDone()
+                    return
+                }
+
+                service.registerWaitTask(
+                    targetText  = step.targetText,
+                    waitForShow = step.waitForShow,
+                    timeoutMs   = step.timeoutSec * 1000L,
+                    onFound = {
+                        addBotMessage("✅ ظهر [${step.targetText}]")
+                        if (step.onFound != null) {
+                            val foundStep = StepEngine.parse(step.onFound)
+                            executeStep(foundStep, delayMs) {
+                                android.os.Handler(mainLooper).postDelayed(onDone, delayMs)
+                            }
+                        } else {
+                            android.os.Handler(mainLooper).postDelayed(onDone, delayMs)
+                        }
+                    },
+                    onTimeout = {
+                        addBotMessage("⏰ انتهت المهلة بدون ظهور [${step.targetText}]")
+                        if (step.onTimeout != null) {
+                            val timeoutStep = StepEngine.parse(step.onTimeout)
+                            executeStep(timeoutStep, delayMs) {
+                                android.os.Handler(mainLooper).postDelayed(onDone, delayMs)
+                            }
+                        } else {
+                            onDone()
+                        }
+                    }
+                )
+            }
         }
     }
 
