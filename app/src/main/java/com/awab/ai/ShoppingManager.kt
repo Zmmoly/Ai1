@@ -199,7 +199,110 @@ object ShoppingManager {
         )
     }
 
-    // ===== تنسيق العرض =====
+    // ===== البحث بالتاريخ =====
+
+    /**
+     * يُرجع المشتريات في يوم محدد
+     * @param dayStart بداية اليوم بالميلي ثانية
+     * @param dayEnd   نهاية اليوم بالميلي ثانية
+     */
+    fun getItemsByDate(context: Context, dayStart: Long, dayEnd: Long): List<ShoppingItem> {
+        return loadItems(context).filter { it.timestamp in dayStart..dayEnd }
+    }
+
+    /**
+     * يحلل نص التاريخ ويُرجع (بداية اليوم، نهاية اليوم)
+     * يدعم: اليوم، امس، أول امس، يوم الاثنين...الجمعة، تاريخ رقمي 20/3
+     */
+    fun parseDate(input: String): Pair<Long, Long>? {
+        val lower = input.lowercase().trim()
+        val cal   = java.util.Calendar.getInstance()
+
+        // اضبط لبداية اليوم
+        fun startOfDay(c: java.util.Calendar): Long {
+            c.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            c.set(java.util.Calendar.MINUTE, 0)
+            c.set(java.util.Calendar.SECOND, 0)
+            c.set(java.util.Calendar.MILLISECOND, 0)
+            return c.timeInMillis
+        }
+        fun endOfDay(start: Long) = start + 86_399_999L  // +23:59:59.999
+
+        // اليوم
+        if (lower.contains("اليوم")) {
+            val s = startOfDay(cal)
+            return Pair(s, endOfDay(s))
+        }
+
+        // امس
+        if (lower.contains("امس") || lower.contains("أمس")) {
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+            val s = startOfDay(cal)
+            return Pair(s, endOfDay(s))
+        }
+
+        // أول امس
+        if (lower.contains("أول امس") || lower.contains("اول امس")) {
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
+            val s = startOfDay(cal)
+            return Pair(s, endOfDay(s))
+        }
+
+        // أيام الأسبوع
+        val dayNames = mapOf(
+            "الأحد"    to java.util.Calendar.SUNDAY,
+            "الاحد"    to java.util.Calendar.SUNDAY,
+            "الاثنين"  to java.util.Calendar.MONDAY,
+            "الثلاثاء" to java.util.Calendar.TUESDAY,
+            "الأربعاء" to java.util.Calendar.WEDNESDAY,
+            "الاربعاء" to java.util.Calendar.WEDNESDAY,
+            "الخميس"   to java.util.Calendar.THURSDAY,
+            "الجمعة"   to java.util.Calendar.FRIDAY,
+            "السبت"    to java.util.Calendar.SATURDAY
+        )
+        for ((name, dayOfWeek) in dayNames) {
+            if (lower.contains(name)) {
+                // ارجع للخلف حتى نجد هذا اليوم
+                var diff = cal.get(java.util.Calendar.DAY_OF_WEEK) - dayOfWeek
+                if (diff <= 0) diff += 7
+                cal.add(java.util.Calendar.DAY_OF_YEAR, -diff)
+                val s = startOfDay(cal)
+                return Pair(s, endOfDay(s))
+            }
+        }
+
+        // تاريخ رقمي: "20/3" أو "20/3/2025"
+        val datePattern = Regex("(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?")
+        datePattern.find(lower)?.let { m ->
+            val day   = m.groupValues[1].toIntOrNull() ?: return null
+            val month = m.groupValues[2].toIntOrNull() ?: return null
+            val year  = m.groupValues[3].toIntOrNull()
+                ?.let { if (it < 100) 2000 + it else it }
+                ?: cal.get(java.util.Calendar.YEAR)
+            cal.set(year, month - 1, day)
+            val s = startOfDay(cal)
+            return Pair(s, endOfDay(s))
+        }
+
+        return null
+    }
+
+    /** يُنسّق فاتورة ليوم محدد */
+    fun formatDateReceipt(context: Context, items: List<ShoppingItem>, dateLabel: String): String {
+        if (items.isEmpty()) return "🛒 لم تشتري شيئاً $dateLabel"
+
+        val total = items.sumOf { it.total }
+        val sb    = StringBuilder("🛒 مشتريات $dateLabel:\n")
+        sb.appendLine("─────────────────")
+        items.forEachIndexed { i, item ->
+            val qtyStr = if (item.quantity != 1.0) " × ${formatNum(item.quantity)}" else ""
+            val src    = if (item.priceSource == "ذاكرة") " 🧠" else ""
+            sb.appendLine("${i + 1}. ${item.name}$qtyStr = ${formatNum(item.total)} ر$src")
+        }
+        sb.appendLine("─────────────────")
+        sb.append("💰 الإجمالي: ${formatNum(total)} ر")
+        return sb.toString()
+    }
 
     fun formatReceipt(context: Context): String {
         val items   = loadItems(context)
