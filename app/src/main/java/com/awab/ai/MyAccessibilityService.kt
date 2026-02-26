@@ -103,13 +103,13 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val ev = event ?: return
 
-        // نستمع فقط لظهور عناصر جديدة
+        // نستمع لتغييرات النافذة وظهور نوافذ جديدة (متوافق مع كل الإصدارات)
         if (ev.eventType != AccessibilityEvent.TYPE_VIEW_APPEARED) return
 
         // فلتر سريع
         if (!hasActiveTasks.get()) return
 
-        // نقرأ نص العنصر الذي ظهر مباشرة من الحدث — بدون getScreenText()
+        // نقرأ نص الحدث مباشرة بدون getScreenText()
         val appearedText = ev.text.joinToString(" ").lowercase().trim()
         if (appearedText.isBlank()) return
 
@@ -119,7 +119,7 @@ class MyAccessibilityService : AccessibilityService() {
         val toRemove = mutableListOf<WaitTask>()
 
         for (task in tasks) {
-            if (!task.waitForShow) continue  // "اختفاء" لا ينطبق هنا
+            if (!task.waitForShow) continue
             if (appearedText.contains(task.targetText.lowercase())) {
                 toRemove.add(task)
                 Log.d(TAG, "✅ ظهر العنصر #${task.id}: \"${task.targetText}\"")
@@ -131,7 +131,6 @@ class MyAccessibilityService : AccessibilityService() {
             synchronized(waitTasks) {
                 waitTasks.removeAll(toRemove.toSet())
                 hasActiveTasks.set(waitTasks.isNotEmpty())
-                // إذا انتهت كل المهام → ارجع للوضع الصامت
                 if (waitTasks.isEmpty()) setListenPackage(null)
             }
         }
@@ -146,7 +145,7 @@ class MyAccessibilityService : AccessibilityService() {
         info.eventTypes = if (packageName != null)
             AccessibilityEvent.TYPE_VIEW_APPEARED
         else
-            0  // لا نستمع لأي حدث
+            0
         info.packageNames = if (packageName != null) arrayOf(packageName) else arrayOf("com.awab.ai")
         serviceInfo = info
         Log.d(TAG, if (packageName != null) "👂 أستمع لـ $packageName" else "🔇 وضع صامت")
