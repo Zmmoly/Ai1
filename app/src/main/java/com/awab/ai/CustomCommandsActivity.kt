@@ -331,8 +331,12 @@ class CustomCommandsActivity : AppCompatActivity() {
         btnRow.addView(makeAddBtn("+ خطوة", PRIMARY_COLOR, ""))
         btnRow.addView(makeAddBtn("🔀 شرط", 0xFF1565C0.toInt(),
             "إذا الشاشة تحتوي [نص]: [أمر_صح] وإلا: [أمر_خطأ]"))
-        btnRow.addView(makeAddBtn("🔁 حلقة", 0xFF6A1B9A.toInt(),
+        btnRow.addView(makeAddBtn("🔁 حلقة سطر", 0xFF6A1B9A.toInt(),
             "كرر [N] مرات: [الأمر]"))
+        btnRow.addView(makeAddBtn("🔁 حلقة متعددة", 0xFF4A148C.toInt(),
+            "ابدأ حلقة [N] مرات"))
+        btnRow.addView(makeAddBtn("🔚 انهي حلقة", 0xFF4A148C.toInt(),
+            "انهي حلقة"))
         btnRow.addView(makeAddBtn("⏳ انتظار", 0xFF00796B.toInt(),
             "انتظر ظهور [نص] لمدة 15 ثانية ثم اضغط على [نص]"))
         container.addView(btnRow)
