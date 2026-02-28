@@ -37,17 +37,6 @@ sealed class Step {
     data class Loop(val times: Int, val body: List<Step>) : Step()
 
     /**
-     * حلقة متعددة الخطوات — تُبنى من علامتَي ابدأ حلقة / انهي حلقة
-     * في StepEngine نمثلها بنفس Loop لكن body تحتوي أكثر من خطوة
-     */
-    // (يُعاد استخدام Loop نفسها — MultiLoop هو اسم منطقي فقط)
-
-    companion object {
-        const val LOOP_START = "__LOOP_START__"
-        const val LOOP_END   = "__LOOP_END__"
-    }
-
-    /**
      * انتظار حدث على الشاشة
      * @param targetText  النص المطلوب
      * @param waitForShow true=ظهور / false=اختفاء
