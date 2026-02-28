@@ -104,6 +104,56 @@ object CustomCommandsManager {
 
     fun generateId(): String = System.currentTimeMillis().toString()
 
+    /**
+     * يحوّل قائمة الخطوات الخام إلى قائمة Step مع دعم حلقات متعددة الأسطر.
+     *
+     * الصيغة المدعومة في الأوامر المخصصة:
+     *   ابدأ حلقة 5 مرات
+     *      افتح واتساب
+     *      اضغط على إرسال
+     *      رجوع
+     *   انهي حلقة
+     *
+     * تعمل مع حلقات متداخلة بلا حدود.
+     */
+    fun parseStepsToStepList(rawSteps: List<String>): List<Step> {
+        return parseBlock(rawSteps, 0).first
+    }
+
+    private val loopStartRegex = Regex(
+        "^(?:ابدأ|ابدا|بدأ|بدا)\\s+حلقة\\s+(\\d+)\\s*(?:مرات?|مره)?$",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun parseBlock(lines: List<String>, startIndex: Int): Pair<List<Step>, Int> {
+        val steps = mutableListOf<Step>()
+        var i = startIndex
+        while (i < lines.size) {
+            val line = lines[i].trim()
+            if (line.isBlank()) { i++; continue }
+
+            // نهاية كتلة حالية
+            if (line.matches(Regex("^(?:انهي|انهِ|أنهي|انتهي)\\s+حلقة$", RegexOption.IGNORE_CASE))) {
+                return Pair(steps, i + 1)
+            }
+
+            // بداية حلقة متعددة الأسطر
+            val loopMatch = loopStartRegex.matchEntire(line)
+            if (loopMatch != null) {
+                val times = loopMatch.groupValues[1].toIntOrNull()?.coerceIn(1, 100) ?: 1
+                val (bodySteps, nextIndex) = parseBlock(lines, i + 1)
+                steps.add(Step.Loop(times, bodySteps))
+                i = nextIndex
+                continue
+            }
+
+            // خطوة عادية (تمر على StepEngine لدعم كرر / انتظر / إذا)
+            steps.add(StepEngine.parse(line))
+            i++
+        }
+        return Pair(steps, i)
+    }
+
     // قائمة الأوامر الجاهزة (hints للمستخدم عند بناء الخطوات)
     val AVAILABLE_COMMANDS = listOf(
         "افتح [اسم التطبيق]",
