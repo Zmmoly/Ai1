@@ -172,7 +172,9 @@ object ReminderManager {
 
         // استخراج نص التذكير (الجزء بعد كلمة "بـ" في نهاية الجملة)
         fun extractText(after: String): String {
-            val bPattern = Regex("\\s+ب(?:ـ)?\\s*(.+)$")
+            // نبحث عن آخر " ب" أو " بـ" كحرف جر (تسبق كلمة)
+            // نأخذ كل النص من بعد المسافة قبل الباء (بما فيه الباء نفسها)
+            val bPattern = Regex("\\s+(ب(?:ـ)?\\S.*)$")
             return bPattern.find(after)?.groupValues?.get(1)?.trim()
                 ?.takeIf { it.isNotBlank() } ?: "تذكير!"
         }
@@ -289,7 +291,7 @@ object ReminderManager {
         if (dayOfWeek != null) {
             val today = cal.get(java.util.Calendar.DAY_OF_WEEK)
             var diff = dayOfWeek - today
-            if (diff <= 0) diff += 7  // الأسبوع القادم إذا فات
+            if (diff <= 0) diff += 7  // الأسبوع القادم دائماً عند ذكر اسم اليوم
             cal.add(java.util.Calendar.DAY_OF_YEAR, diff)
             cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
             cal.set(java.util.Calendar.MINUTE, minute)
@@ -413,8 +415,8 @@ object ReminderManager {
         val unit = match.groupValues[2]
 
         return when {
-            unit.contains("ثان") -> (num * 1_000).toLong()
-            unit.contains("دقيق") -> (num * 60_000).toLong()
+            unit.contains("ثان") || unit == "ثواني" -> (num * 1_000).toLong()
+            unit.contains("دقيق") || unit == "دقائق" -> (num * 60_000).toLong()
             unit.contains("ساع") -> (num * 3_600_000).toLong()
             unit.contains("يوم") || unit.contains("أيام") || unit.contains("ايام") ->
                 (num * 86_400_000).toLong()
