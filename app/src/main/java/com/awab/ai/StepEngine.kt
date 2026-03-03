@@ -61,7 +61,7 @@ object StepEngine {
     // ─── تحليل نص الخطوة ───────────────────
 
     fun parse(raw: String): Step {
-        val t = raw.trim()
+        val t = raw.trim().normalizeNumbers()
 
         // حلقة: "كرر N مرات → ..."
         Regex(
