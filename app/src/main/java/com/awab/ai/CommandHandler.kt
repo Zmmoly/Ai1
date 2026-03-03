@@ -18,7 +18,8 @@ class CommandHandler(private val context: Context) {
      * معالجة أوامر متعددة في رسالة واحدة
      * الأوامر يمكن أن تكون مفصولة بـ: و، ثم، ،
      */
-    fun handleMultipleCommands(message: String): List<String> {
+    fun handleMultipleCommands(rawMessage: String): List<String> {
+        val message = rawMessage.normalizeNumbers()
         // فصل الأوامر بناءً على الفواصل
         val separators = listOf(" و ", " ثم ", "،", ",", "\n")
         var commands = listOf(message)
@@ -53,7 +54,8 @@ class CommandHandler(private val context: Context) {
         return results
     }
 
-    fun handleCommand(message: String): String {
+    fun handleCommand(rawMessage: String): String {
+        val message = rawMessage.normalizeNumbers()
         val lowerMessage = message.lowercase()
 
         return when {
@@ -323,7 +325,8 @@ class CommandHandler(private val context: Context) {
         }
 
         // إذا كان رقم - اتصال مباشر
-        if (contactName.matches(Regex("^[0-9+]+$"))) {
+        val contactNorm = contactName.normalizeNumbers()
+        if (contactNorm.matches(Regex("^[0-9+]+$"))) {
             try {
                 val intent = Intent(Intent.ACTION_CALL).apply {  // ← تم التغيير من ACTION_DIAL إلى ACTION_CALL
                     data = Uri.parse("tel:$contactName")
