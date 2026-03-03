@@ -103,27 +103,42 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val ev = event ?: return
 
-        // نستمع لتغييرات النافذة وظهور نوافذ جديدة (متوافق مع كل الإصدارات)
-        if (ev.eventType != 0x20000000) return
+        // نستمع لتغييرات محتوى النافذة وتغييرات الحالة — الأنواع الصحيحة المتوافقة مع كل الإصدارات
+        if (ev.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            ev.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
-        // فلتر سريع
+        // فلتر سريع — إذا لا توجد مهام نشطة نتجاهل الحدث فوراً
         if (!hasActiveTasks.get()) return
-
-        // نقرأ نص الحدث مباشرة بدون getScreenText()
-        val appearedText = ev.text.joinToString(" ").lowercase().trim()
-        if (appearedText.isBlank()) return
 
         val tasks = synchronized(waitTasks) { waitTasks.toList() }
         if (tasks.isEmpty()) return
 
+        // نقرأ شجرة الـ View كاملة — المصدر الوحيد الموثوق لنص الأزرار والعناصر
+        // ev.text لا يحتوي على نصوص الأزرار في معظم التطبيقات
+        val root = rootInActiveWindow ?: return
+        val screenTexts = mutableListOf<String>()
+        collectTexts(root, screenTexts)
+        val screenText = screenTexts.joinToString(" ").lowercase().trim()
+
+        if (screenText.isBlank()) return
+
         val toRemove = mutableListOf<WaitTask>()
 
         for (task in tasks) {
-            if (!task.waitForShow) continue
-            if (appearedText.contains(task.targetText.lowercase())) {
-                toRemove.add(task)
-                Log.d(TAG, "✅ ظهر العنصر #${task.id}: \"${task.targetText}\"")
-                mainHandler.post { task.onFound() }
+            val found = screenText.contains(task.targetText.lowercase())
+            when {
+                // انتظار ظهور — النص موجود الآن
+                task.waitForShow && found -> {
+                    toRemove.add(task)
+                    Log.d(TAG, "✅ ظهر العنصر #${task.id}: \"${task.targetText}\"")
+                    mainHandler.post { task.onFound() }
+                }
+                // انتظار اختفاء — النص غير موجود الآن
+                !task.waitForShow && !found -> {
+                    toRemove.add(task)
+                    Log.d(TAG, "✅ اختفى العنصر #${task.id}: \"${task.targetText}\"")
+                    mainHandler.post { task.onFound() }
+                }
             }
         }
 
@@ -143,7 +158,8 @@ class MyAccessibilityService : AccessibilityService() {
     private fun setListenPackage(packageName: String?) {
         val info = serviceInfo ?: return
         info.eventTypes = if (packageName != null)
-            0x20000000  // TYPE_VIEW_APPEARED (API 35)
+            // TYPE_WINDOW_CONTENT_CHANGED | TYPE_WINDOW_STATE_CHANGED — القيم الصحيحة
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         else
             0
         info.packageNames = if (packageName != null) arrayOf(packageName) else arrayOf("com.awab.ai")
