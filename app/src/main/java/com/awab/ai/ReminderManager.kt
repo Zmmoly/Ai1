@@ -166,7 +166,8 @@ object ReminderManager {
      *                     "ذكرني غداً الساعة 8 الصبح"
      *                     "ذكرني بكرة الساعة 10:30 بالاجتماع"
      */
-    fun parseReminder(input: String): Pair<String, Long>? {
+    fun parseReminder(rawInput: String): Pair<String, Long>? {
+        val input = rawInput.normalizeNumbers()
         val lower = input.lowercase().trim()
 
         // استخراج نص التذكير (الجزء بعد كلمة "بـ" في نهاية الجملة)
@@ -214,7 +215,8 @@ object ReminderManager {
      * - "اليوم الساعة 5"
      * - "الساعة 9 مساءً"  (اليوم)
      */
-    fun parseDateTime(text: String): Long? {
+    fun parseDateTime(rawText: String): Long? {
+        val text = rawText.normalizeNumbers()
         val lower = text.lowercase().trim()
         val cal = java.util.Calendar.getInstance()
 
@@ -381,7 +383,8 @@ object ReminderManager {
     /**
      * تحويل النص الزمني (مدة نسبية) لميلي ثانية
      */
-    fun parseDuration(text: String): Long? {
+    fun parseDuration(rawText: String): Long? {
+        val text = rawText.normalizeNumbers()
         val lower = text.lowercase().trim()
 
         val specialMap = mapOf(
