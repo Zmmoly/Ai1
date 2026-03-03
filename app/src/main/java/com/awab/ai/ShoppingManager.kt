@@ -232,7 +232,8 @@ object ShoppingManager {
 
     // ===== تحليل الشراء =====
 
-    fun parsePurchase(input: String): ParsedPurchase? {
+    fun parsePurchase(rawInput: String): ParsedPurchase? {
+        val input = rawInput.normalizeNumbers()
         val lower = input.lowercase().trim()
         val triggers = listOf("اشتريت", "أخذت", "اخذت", "جبت", "حصلت على", "شريت")
         val trigger = triggers.firstOrNull { lower.startsWith(it) } ?: return null
@@ -308,7 +309,8 @@ object ShoppingManager {
     fun getSessionsByDate(context: Context, dayStart: Long, dayEnd: Long): List<ShoppingSession> =
         loadSessions(context).filter { it.startTime in dayStart..dayEnd || it.id == GENERAL_SESSION_ID }
 
-    fun parseDate(input: String): Pair<Long, Long>? {
+    fun parseDate(rawInput: String): Pair<Long, Long>? {
+        val input = rawInput.normalizeNumbers()
         val lower = input.lowercase().trim()
         val cal   = java.util.Calendar.getInstance()
 
