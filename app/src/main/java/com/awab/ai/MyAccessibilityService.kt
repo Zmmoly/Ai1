@@ -113,19 +113,16 @@ class MyAccessibilityService : AccessibilityService() {
         val tasks = synchronized(waitTasks) { waitTasks.toList() }
         if (tasks.isEmpty()) return
 
-        // نقرأ شجرة الـ View كاملة — المصدر الوحيد الموثوق لنص الأزرار والعناصر
-        // ev.text لا يحتوي على نصوص الأزرار في معظم التطبيقات
         val root = rootInActiveWindow ?: return
-        val screenTexts = mutableListOf<String>()
-        collectTexts(root, screenTexts)
-        val screenText = screenTexts.joinToString(" ").lowercase().trim()
-
-        if (screenText.isBlank()) return
 
         val toRemove = mutableListOf<WaitTask>()
 
         for (task in tasks) {
-            val found = screenText.contains(task.targetText.lowercase())
+            // findAccessibilityNodeInfosByText يبحث مباشرة بدون بناء الشجرة كاملة
+            // يتوقف فور ما يجد النص — أسرع وأقل استهلاكاً
+            val nodes = root.findAccessibilityNodeInfosByText(task.targetText)
+            val found = !nodes.isNullOrEmpty()
+
             when {
                 // انتظار ظهور — النص موجود الآن
                 task.waitForShow && found -> {
@@ -140,6 +137,9 @@ class MyAccessibilityService : AccessibilityService() {
                     mainHandler.post { task.onFound() }
                 }
             }
+
+            // تحرير العناصر من الذاكرة
+            nodes?.forEach { it.recycle() }
         }
 
         if (toRemove.isNotEmpty()) {
