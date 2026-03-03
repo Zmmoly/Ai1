@@ -25,19 +25,23 @@ class ReminderReceiver : BroadcastReceiver() {
         val reminderId = intent.getIntExtra(ReminderManager.EXTRA_REMINDER_ID, -1)
         val reminderText = intent.getStringExtra(ReminderManager.EXTRA_REMINDER_TEXT) ?: "تذكير!"
 
-        // إنشاء قناة الإشعارات
-        ReminderManager.createNotificationChannel(context)
+        // حذف التذكير من القائمة
+        if (reminderId != -1) {
+            ReminderManager.deleteReminder(context, reminderId)
+        }
 
-        // Intent لفتح التطبيق عند الضغط على الإشعار
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+        // تشغيل شاشة المنبه الكاملة (صوت + اهتزاز + واجهة)
+        ReminderAlarmActivity.start(context, reminderText)
+
+        // إشعار احتياطي في شريط الإشعارات (يظهر مع الشاشة)
+        ReminderManager.createNotificationChannel(context)
+        val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
-            context, reminderId, openAppIntent,
+            context, reminderId, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        // بناء الإشعار
         val notification = NotificationCompat.Builder(context, ReminderManager.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("⏰ تذكير من أواب AI")
@@ -46,20 +50,9 @@ class ReminderReceiver : BroadcastReceiver() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-            .setVibrate(longArrayOf(0, 500, 200, 500))
             .build()
-
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(reminderId, notification)
-
-        // حذف التذكير من القائمة بعد تنفيذه
-        if (reminderId != -1) {
-            ReminderManager.deleteReminder(context, reminderId)
-        }
-
-        // اهتزاز
-        vibrate(context)
     }
 
     private fun vibrate(context: Context) {
