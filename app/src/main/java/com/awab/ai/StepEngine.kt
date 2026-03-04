@@ -1,4 +1,3 @@
-
 package com.awab.ai
 
 /**
@@ -53,6 +52,9 @@ sealed class Step {
         val onTimeout: String?,
         val packageName: String? = null   // null = التطبيق الحالي تلقائياً
     ) : Step()
+
+    /** انتظر N ثانية بدون شرط */
+    data class Delay(val seconds: Int) : Step()
 }
 
 // ===== المحرك =====
