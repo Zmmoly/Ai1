@@ -139,17 +139,11 @@ class MainActivity : AppCompatActivity() {
             inputField = EditText(this@MainActivity).apply {
                 hint = "اكتب رسالتك هنا..."
                 textSize = 16f
-                setPadding(20, 16, 20, 16)
+                setPadding(24, 16, 24, 16)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                background = createRoundedBackground(0xFFF0F2F5.toInt(), 24f)
-                isFocusable = true
-                isFocusableInTouchMode = true
-                isClickable = true
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                            android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                            android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                // نستخدم setBackgroundColor بدل background= لتجنب إزالة KeyListener
+                setBackgroundColor(0xFFF0F2F5.toInt())
                 maxLines = 4
-                setHorizontallyScrolling(false)
             }
             addView(inputField)
 
@@ -626,7 +620,6 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
                 maxWidth = (resources.displayMetrics.widthPixels * 0.75).toInt()
-                setTextIsSelectable(true)
             })
         }
     }
