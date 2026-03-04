@@ -730,6 +730,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             // ── انتظار حدث ──────────────────────────
+            is Step.Delay -> {
+                addBotMessage("⏱️ انتظر ${step.seconds} ثانية...")
+                android.os.Handler(mainLooper).postDelayed({
+                    onDone()
+                }, step.seconds * 1000L)
+            }
+
             is Step.Wait -> {
                 val dir = if (step.waitForShow) "ظهور" else "اختفاء"
                 addBotMessage("⏳ انتظار $dir [${step.targetText}] (مهلة: ${step.timeoutSec}ث)...")
