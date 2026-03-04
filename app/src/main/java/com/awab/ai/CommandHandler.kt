@@ -186,8 +186,115 @@ class CommandHandler(private val context: Context) {
                 clickOnText(text)
             }
 
+            // مراقبة تطبيق: "راقب يوتيوب 5 مرات → انتظر ظهور [تخطي] ثم اضغط على تخطي"
+            lowerMessage.startsWith("راقب ") -> {
+                parseAndStartWatch(message)
+            }
+
+            // إيقاف المراقبة: "أوقف مراقبة يوتيوب"
+            lowerMessage.startsWith("أوقف مراقبة ") || lowerMessage.startsWith("اوقف مراقبة ") ||
+            lowerMessage.startsWith("أوقف المراقبة") || lowerMessage.startsWith("اوقف المراقبة") -> {
+                stopWatch(message)
+            }
+
+            // عرض المراقبات النشطة
+            lowerMessage.contains("المراقبات") || lowerMessage.contains("مراقبات نشطة") -> {
+                listWatches()
+            }
+
             else -> null
         } ?: "لم أفهم الأمر. جرب:\n• افتح [اسم التطبيق]\n• اتصل [اسم أو رقم]\n• اتصل ب[اسم]\n• اضرب ل[اسم]\n• شغل الواي فاي\n• سكرين شوت\n• على الصوت\n• رجوع\n• اقرا الشاشة"
+    }
+
+    // ===== دوال المراقبة =====
+
+    /**
+     * يحلل أمر المراقبة ويبدأها
+     * الصيغة: راقب [تطبيق] [N] مرات → انتظر ظهور [نص] ثم اضغط على نص
+     */
+    private fun parseAndStartWatch(message: String): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        // راقب يوتيوب 5 مرات → انتظر ظهور [تخطي] ثم اضغط على تخطي
+        val pattern = Regex(
+            "^راقب\s+([\w\u0600-\u06FF]+)" +
+            "(?:\s+(\d+)\s*مر(?:ات?|ه))?" +
+            "\s*[→\->:]\s*" +
+            "انتظر\s+ظهور\s+\[(.+?)\]" +
+            "(?:\s+ثم\s+(.+))?$",
+            RegexOption.IGNORE_CASE
+        )
+
+        val m = pattern.find(message.trim()) ?: return "⚠️ صيغة غير صحيحة. مثال:\nراقب يوتيوب 5 مرات → انتظر ظهور [تخطي] ثم اضغط على تخطي"
+
+        val appName     = m.groupValues[1].trim()
+        val countStr    = m.groupValues[2].trim()
+        val targetText  = m.groupValues[3].trim()
+        val actionCmd   = m.groupValues[4].trim()
+        val repeatCount = if (countStr.isBlank()) 1 else countStr.toIntOrNull() ?: 1
+
+        // حل اسم التطبيق
+        val pkg = StepEngine.resolvePackage(appName)
+
+        val watchId = service.registerWatchTask(
+            packageName  = pkg,
+            targetText   = targetText,
+            repeatCount  = repeatCount
+        ) {
+            // عند العثور على النص — نفّذ الإجراء
+            if (actionCmd.isNotBlank()) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    handleCommand(actionCmd)
+                }
+            }
+        }
+
+        val countLabel = if (repeatCount == 1) "مرة واحدة" else "$repeatCount مرات"
+        return "👁️ بدأت مراقبة [$appName] — سأبحث عن [$targetText] وأنفذ [$actionCmd] × $countLabel\n\nللإيقاف: أوقف مراقبة $appName\n(معرف المراقبة: #$watchId)"
+    }
+
+    /** إيقاف مراقبة تطبيق */
+    private fun stopWatch(message: String): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ خدمة إمكانية الوصول غير مفعّلة"
+
+        val lower = message.lowercase()
+        val appName = lower
+            .removePrefix("أوقف مراقبة").removePrefix("اوقف مراقبة")
+            .removePrefix("أوقف المراقبة").removePrefix("اوقف المراقبة")
+            .trim()
+
+        if (appName.isBlank()) {
+            // إيقاف كل المراقبات
+            val watches = service.getActiveWatchTasks()
+            if (watches.isEmpty()) return "لا توجد مراقبات نشطة"
+            watches.forEach { service.cancelWatchTask(it.id) }
+            return "🛑 تم إيقاف جميع المراقبات (${watches.size})"
+        }
+
+        val pkg = StepEngine.resolvePackage(appName)
+        val count = service.cancelWatchTasksByPackage(pkg)
+        return if (count > 0)
+            "🛑 تم إيقاف مراقبة [$appName] ($count مهمة)"
+        else
+            "⚠️ لا توجد مراقبة نشطة لـ [$appName]"
+    }
+
+    /** عرض المراقبات النشطة */
+    private fun listWatches(): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ خدمة إمكانية الوصول غير مفعّلة"
+
+        val watches = service.getActiveWatchTasks()
+        if (watches.isEmpty()) return "📭 لا توجد مراقبات نشطة حالياً"
+
+        val sb = StringBuilder("👁️ المراقبات النشطة:\n\n")
+        watches.forEach { w ->
+            val count = if (w.remainingCount == -1) "∞" else "${w.remainingCount}"
+            sb.appendLine("#${w.id} | ${w.packageName} | [${w.targetText}] | متبقي: $count")
+        }
+        return sb.toString().trimEnd()
     }
 
     private fun openApp(appName: String): String {
