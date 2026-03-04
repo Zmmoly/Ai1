@@ -36,6 +36,29 @@ class MyAccessibilityService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var nextTaskId = 0
 
+    // ===== نظام المراقبة المستمرة =====
+
+    /**
+     * مهمة مراقبة مستمرة لتطبيق معين
+     * تنتظر فتح التطبيق → تبحث عن نص → تنفذ إجراء → تكرر
+     *
+     * @param packageName  الحزمة المراقبة
+     * @param targetText   النص المنتظر
+     * @param repeatCount  عدد مرات التنفيذ (-1 = بلا حدود)
+     * @param onTrigger    الإجراء عند العثور على النص
+     */
+    data class WatchTask(
+        val id: Int,
+        val packageName: String,
+        val targetText: String,
+        var remainingCount: Int,        // -1 = بلا حدود
+        val onTrigger: () -> Unit,
+        var appIsOpen: Boolean = false  // هل التطبيق مفتوح حالياً
+    )
+
+    private val watchTasks = mutableListOf<WatchTask>()
+    private val hasWatchTasks = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /**
      * يسجّل مهمة انتظار جديدة
      * يُرجع ID المهمة (لإلغائها إذا لزم)
@@ -96,6 +119,86 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * يسجّل مهمة مراقبة مستمرة
+     * يُرجع ID المهمة
+     */
+    fun registerWatchTask(
+        packageName: String,
+        targetText: String,
+        repeatCount: Int = 1,
+        onTrigger: () -> Unit
+    ): Int {
+        val id = nextTaskId++
+        val task = WatchTask(
+            id            = id,
+            packageName   = packageName,
+            targetText    = targetText,
+            remainingCount = repeatCount,
+            onTrigger     = onTrigger
+        )
+        synchronized(watchTasks) {
+            watchTasks.add(task)
+            hasWatchTasks.set(true)
+        }
+        updateListenPackages()
+        Log.d(TAG, "👁️ مراقبة #$id: [$targetText] في $packageName × $repeatCount")
+        return id
+    }
+
+    /** إلغاء مهمة مراقبة بالـ ID */
+    fun cancelWatchTask(id: Int) {
+        synchronized(watchTasks) {
+            watchTasks.removeAll { it.id == id }
+            hasWatchTasks.set(watchTasks.isNotEmpty())
+        }
+        updateListenPackages()
+        Log.d(TAG, "🛑 إلغاء مراقبة #$id")
+    }
+
+    /** إلغاء كل مهام مراقبة تطبيق معين */
+    fun cancelWatchTasksByPackage(packageName: String): Int {
+        var count = 0
+        synchronized(watchTasks) {
+            count = watchTasks.count { it.packageName == packageName }
+            watchTasks.removeAll { it.packageName == packageName }
+            hasWatchTasks.set(watchTasks.isNotEmpty())
+        }
+        updateListenPackages()
+        return count
+    }
+
+    /** قائمة المراقبات النشطة */
+    fun getActiveWatchTasks(): List<WatchTask> {
+        return synchronized(watchTasks) { watchTasks.toList() }
+    }
+
+    /**
+     * يحدّث قائمة الحزم المستمَع لها بناءً على المهام النشطة
+     * يجمع حزم WaitTasks و WatchTasks معاً
+     */
+    private fun updateListenPackages() {
+        val info = serviceInfo ?: return
+        val allPackages = mutableSetOf<String>()
+
+        synchronized(waitTasks) {
+            // نأخذ packageNames من serviceInfo الحالي (WaitTasks تضبطه)
+        }
+        synchronized(watchTasks) {
+            watchTasks.forEach { allPackages.add(it.packageName) }
+        }
+
+        if (allPackages.isEmpty() && !hasActiveTasks.get()) {
+            info.eventTypes = 0
+            info.packageNames = arrayOf("com.awab.ai")
+        } else {
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            info.packageNames = allPackages.toTypedArray()
+        }
+        serviceInfo = info
+    }
+
     // ===== معالجة أحداث الشاشة =====
 
     private val hasActiveTasks = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -103,50 +206,85 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val ev = event ?: return
 
-        // نستمع لتغييرات محتوى النافذة وتغييرات الحالة — الأنواع الصحيحة المتوافقة مع كل الإصدارات
         if (ev.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             ev.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
-        // فلتر سريع — إذا لا توجد مهام نشطة نتجاهل الحدث فوراً
-        if (!hasActiveTasks.get()) return
-
-        val tasks = synchronized(waitTasks) { waitTasks.toList() }
-        if (tasks.isEmpty()) return
-
         val root = rootInActiveWindow ?: return
+        val currentPkg = root.packageName?.toString() ?: return
 
-        val toRemove = mutableListOf<WaitTask>()
+        // ===== معالجة WaitTasks =====
+        if (hasActiveTasks.get()) {
+            val tasks = synchronized(waitTasks) { waitTasks.toList() }
+            val toRemove = mutableListOf<WaitTask>()
 
-        for (task in tasks) {
-            // findAccessibilityNodeInfosByText يبحث مباشرة بدون بناء الشجرة كاملة
-            // يتوقف فور ما يجد النص — أسرع وأقل استهلاكاً
-            val nodes = root.findAccessibilityNodeInfosByText(task.targetText)
-            val found = !nodes.isNullOrEmpty()
-
-            when {
-                // انتظار ظهور — النص موجود الآن
-                task.waitForShow && found -> {
-                    toRemove.add(task)
-                    Log.d(TAG, "✅ ظهر العنصر #${task.id}: \"${task.targetText}\"")
-                    mainHandler.post { task.onFound() }
+            for (task in tasks) {
+                val nodes = root.findAccessibilityNodeInfosByText(task.targetText)
+                val found = !nodes.isNullOrEmpty()
+                when {
+                    task.waitForShow && found -> {
+                        toRemove.add(task)
+                        Log.d(TAG, "✅ ظهر #${task.id}: \"${task.targetText}\"")
+                        mainHandler.post { task.onFound() }
+                    }
+                    !task.waitForShow && !found -> {
+                        toRemove.add(task)
+                        Log.d(TAG, "✅ اختفى #${task.id}: \"${task.targetText}\"")
+                        mainHandler.post { task.onFound() }
+                    }
                 }
-                // انتظار اختفاء — النص غير موجود الآن
-                !task.waitForShow && !found -> {
-                    toRemove.add(task)
-                    Log.d(TAG, "✅ اختفى العنصر #${task.id}: \"${task.targetText}\"")
-                    mainHandler.post { task.onFound() }
+                nodes?.forEach { it.recycle() }
+            }
+
+            if (toRemove.isNotEmpty()) {
+                synchronized(waitTasks) {
+                    waitTasks.removeAll(toRemove.toSet())
+                    hasActiveTasks.set(waitTasks.isNotEmpty())
+                }
+                updateListenPackages()
+            }
+        }
+
+        // ===== معالجة WatchTasks =====
+        if (hasWatchTasks.get()) {
+            val watches = synchronized(watchTasks) { watchTasks.toList() }
+            val toRemove = mutableListOf<WatchTask>()
+
+            for (watch in watches) {
+                // تحديث حالة التطبيق (مفتوح/مغلق)
+                if (ev.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                    watch.appIsOpen = (currentPkg == watch.packageName)
+                }
+
+                // لا نبحث إلا إذا التطبيق مفتوح
+                if (!watch.appIsOpen && currentPkg != watch.packageName) continue
+
+                watch.appIsOpen = true
+
+                val nodes = root.findAccessibilityNodeInfosByText(watch.targetText)
+                val found = !nodes.isNullOrEmpty()
+                nodes?.forEach { it.recycle() }
+
+                if (found) {
+                    Log.d(TAG, "👁️ مراقبة #${watch.id}: وجد [${watch.targetText}] في ${watch.packageName}")
+                    mainHandler.post { watch.onTrigger() }
+
+                    if (watch.remainingCount > 0) {
+                        watch.remainingCount--
+                        if (watch.remainingCount == 0) {
+                            toRemove.add(watch)
+                            Log.d(TAG, "👁️ مراقبة #${watch.id}: اكتمل العدد")
+                        }
+                    }
+                    // remainingCount = -1 → تكرار بلا حدود، لا نحذف
                 }
             }
 
-            // تحرير العناصر من الذاكرة
-            nodes?.forEach { it.recycle() }
-        }
-
-        if (toRemove.isNotEmpty()) {
-            synchronized(waitTasks) {
-                waitTasks.removeAll(toRemove.toSet())
-                hasActiveTasks.set(waitTasks.isNotEmpty())
-                if (waitTasks.isEmpty()) setListenPackage(null)
+            if (toRemove.isNotEmpty()) {
+                synchronized(watchTasks) {
+                    watchTasks.removeAll(toRemove.toSet())
+                    hasWatchTasks.set(watchTasks.isNotEmpty())
+                }
+                updateListenPackages()
             }
         }
     }
@@ -156,14 +294,8 @@ class MyAccessibilityService : AccessibilityService() {
      * null = لا نستمع لأحد (وضع صامت)
      */
     private fun setListenPackage(packageName: String?) {
-        val info = serviceInfo ?: return
-        info.eventTypes = if (packageName != null)
-            // TYPE_WINDOW_CONTENT_CHANGED | TYPE_WINDOW_STATE_CHANGED — القيم الصحيحة
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        else
-            0
-        info.packageNames = if (packageName != null) arrayOf(packageName) else arrayOf("com.awab.ai")
-        serviceInfo = info
+        // نستدعي updateListenPackages لضمان دمج WaitTasks و WatchTasks
+        updateListenPackages()
         Log.d(TAG, if (packageName != null) "👂 أستمع لـ $packageName" else "🔇 وضع صامت")
     }
 
