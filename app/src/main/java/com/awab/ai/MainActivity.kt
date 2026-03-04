@@ -620,6 +620,8 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
                 maxWidth = (resources.displayMetrics.widthPixels * 0.75).toInt()
+                setTextIsSelectable(true)
+                isFocusable = false  // لا يسرق الفوكس من EditText
             })
         }
     }
