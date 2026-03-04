@@ -1,3 +1,4 @@
+
 package com.awab.ai
 
 /**
@@ -243,6 +244,7 @@ object StepEngine {
 
     fun describe(step: Step, indent: String = ""): String = when (step) {
         is Step.Normal -> "$indent▶ ${step.command}"
+        is Step.Delay  -> "$indent⏱️ انتظر ${step.seconds} ثانية"
 
         is Step.IfChain -> buildString {
             step.branches.forEachIndexed { i, b ->
