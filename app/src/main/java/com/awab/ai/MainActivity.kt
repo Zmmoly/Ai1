@@ -381,7 +381,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // عرض مشتريات بتاريخ محدد
-        val historyTriggers = listOf("ماذا اشتريت", "ايش اشتريت", "إيش اشتريت", "وش اشتريت")
+        val historyTriggers = listOf("ماذا اشتريت", "ايش اشتريت", "إيش اشتريت", "وش اشتريت", "اشتريت شنو", "شنو اشتريت")
         if (historyTriggers.any { lower.contains(it) }) {
             val dateRange = ShoppingManager.parseDate(userMessage)
             if (dateRange != null) {
