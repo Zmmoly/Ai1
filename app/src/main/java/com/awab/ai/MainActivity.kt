@@ -142,6 +142,14 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 16, 20, 16)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 background = createRoundedBackground(0xFFF0F2F5.toInt(), 24f)
+                isFocusable = true
+                isFocusableInTouchMode = true
+                isClickable = true
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                            android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                            android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                maxLines = 4
+                setHorizontallyScrolling(false)
             }
             addView(inputField)
 
