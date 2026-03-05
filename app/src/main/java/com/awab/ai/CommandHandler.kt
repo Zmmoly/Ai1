@@ -199,6 +199,45 @@ class CommandHandler(private val context: Context) {
                 listWatches()
             }
 
+
+            // ── البحث بالنوع: "اضغط على أول زر" / "اضغط على أول حقل نص" ──
+            lowerMessage.startsWith("اضغط على أول زر") || lowerMessage.startsWith("انقر على أول زر") -> {
+                clickFirstByClass("Button")
+            }
+
+            lowerMessage.startsWith("اضغط على أول حقل") || lowerMessage.startsWith("انقر على أول حقل") -> {
+                clickFirstByClass("EditText")
+            }
+
+            lowerMessage.startsWith("اضغط على أول صورة") || lowerMessage.startsWith("انقر على أول صورة") -> {
+                clickFirstByClass("ImageView")
+            }
+
+            // ── البحث بالـ ID: "اضغط id/send_button" ──
+            lowerMessage.startsWith("اضغط id/") || lowerMessage.startsWith("انقر id/") -> {
+                val id = message.substringAfter("اضغط id/").substringAfter("انقر id/").trim()
+                clickById(id)
+            }
+
+            // ── البحث بالموقع: "اضغط 540 1200" ──
+            Regex("^(اضغط|انقر)\s+(\d+)\s+(\d+)$").containsMatchIn(lowerMessage) -> {
+                val parts = lowerMessage.trim().split("\s+".toRegex())
+                val x = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val y = parts.getOrNull(2)?.toIntOrNull() ?: 0
+                clickAtPosition(x, y)
+            }
+
+            // ── البحث بالوصف: "اضغط وصف ميكروفون" ──
+            lowerMessage.startsWith("اضغط وصف ") || lowerMessage.startsWith("انقر وصف ") -> {
+                val desc = message.substringAfter("اضغط وصف ").substringAfter("انقر وصف ").trim()
+                clickByDescription(desc)
+            }
+
+            // ── اقرأ الشاشة بالتفصيل: "عناصر الشاشة" ──
+            lowerMessage.contains("عناصر الشاشة") || lowerMessage.contains("عناصر قابلة للنقر") -> {
+                listClickableElements()
+            }
+
             else -> null
         } ?: "لم أفهم الأمر. جرب:\n• افتح [اسم التطبيق]\n• اتصل [اسم أو رقم]\n• اتصل ب[اسم]\n• اضرب ل[اسم]\n• شغل الواي فاي\n• سكرين شوت\n• على الصوت\n• رجوع\n• اقرا الشاشة"
     }
@@ -758,6 +797,134 @@ class CommandHandler(private val context: Context) {
             "⚠️ يجب تفعيل خدمة إمكانية الوصول من الإعدادات"
         }
     }
+
+
+    // ───────────────────────────────────────────
+    // دوال البحث المتقدم
+    // ───────────────────────────────────────────
+
+    /** اضغط على أول عنصر من نوع معين (Button, EditText, ImageView) */
+    private fun clickFirstByClass(className: String): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        val root = service.rootInActiveWindow
+            ?: return "⚠️ لا توجد نافذة نشطة"
+
+        val nodes = service.findAllByClass(root, className)
+        root.recycle()
+
+        return if (nodes.isNotEmpty()) {
+            val first = nodes.first()
+            val bounds = android.graphics.Rect()
+            first.getBoundsInScreen(bounds)
+            nodes.forEach { it.recycle() }
+
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                service.performClick(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+            }
+            "✅ ضغطت على أول $className في الشاشة"
+        } else {
+            nodes.forEach { it.recycle() }
+            "⚠️ لم أجد أي عنصر من نوع $className في الشاشة"
+        }
+    }
+
+    /** اضغط على عنصر بالـ ID الداخلي */
+    private fun clickById(id: String): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val root = service.rootInActiveWindow ?: return@post
+            val node = service.findByProperty(root) {
+                it.viewIdResourceName?.contains(id, ignoreCase = true) == true
+            }
+            if (node != null) {
+                val bounds = android.graphics.Rect()
+                node.getBoundsInScreen(bounds)
+                node.recycle()
+                service.performClick(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+            }
+            root.recycle()
+        }
+        return "✅ جاري البحث عن العنصر [$id] والضغط عليه"
+    }
+
+    /** اضغط على إحداثيات محددة */
+    private fun clickAtPosition(x: Int, y: Int): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            service.performClick(x.toFloat(), y.toFloat())
+        }
+        return "✅ ضغطت على الموقع ($x, $y)"
+    }
+
+    /** اضغط على عنصر بالـ ContentDescription (وصف الأيقونة) */
+    private fun clickByDescription(description: String): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val root = service.rootInActiveWindow ?: return@post
+            val node = service.findByDescription(root, description)
+            if (node != null) {
+                val bounds = android.graphics.Rect()
+                node.getBoundsInScreen(bounds)
+                node.recycle()
+                service.performClick(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+            }
+            root.recycle()
+        }
+        return "✅ جاري البحث عن العنصر بوصف [$description] والضغط عليه"
+    }
+
+    /** عرض كل العناصر القابلة للنقر في الشاشة */
+    private fun listClickableElements(): String {
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+
+        val root = service.rootInActiveWindow
+            ?: return "⚠️ لا توجد نافذة نشطة"
+
+        val elements = mutableListOf<String>()
+
+        service.findAllByClass(root, "").forEach { node ->
+            if (node.isClickable) {
+                val text   = node.text?.toString()?.trim()
+                val desc   = node.contentDescription?.toString()?.trim()
+                val id     = node.viewIdResourceName?.substringAfter("/")?.trim()
+                val type   = node.className?.toString()?.substringAfterLast(".")
+                val bounds = android.graphics.Rect()
+                node.getBoundsInScreen(bounds)
+
+                val sb = StringBuilder()
+                val label = text ?: desc ?: type ?: "؟"
+                sb.append("▸ $label")
+                if (!text.isNullOrBlank())  sb.append("\n   النص:    $text")
+                if (!desc.isNullOrBlank())  sb.append("\n   الوصف:   $desc")
+                if (!id.isNullOrBlank())    sb.append("\n   ID:      $id")
+                if (!type.isNullOrBlank())  sb.append("\n   النوع:   $type")
+                sb.append("\n   الموقع:  (${bounds.centerX()}, ${bounds.centerY()})")
+
+                elements.add(sb.toString())
+            }
+            node.recycle()
+        }
+        root.recycle()
+
+        return if (elements.isNotEmpty()) {
+            val shown = elements.take(10)
+            val more  = if (elements.size > 10) "\n\n... و${elements.size - 10} عنصر آخر" else ""
+            "🔍 عناصر الشاشة القابلة للنقر (${elements.size}):\n\n" +
+            shown.joinToString("\n\n") + more
+        } else {
+            "⚠️ لم أجد عناصر قابلة للنقر في الشاشة الحالية"
+        }
+    }
+
 
     private fun clickOnText(text: String): String {
         if (text.isBlank()) {
