@@ -220,8 +220,8 @@ class CommandHandler(private val context: Context) {
             }
 
             // ── البحث بالموقع: "اضغط 540 1200" ──
-            Regex("^(اضغط|انقر)\s+(\d+)\s+(\d+)$").containsMatchIn(lowerMessage) -> {
-                val parts = lowerMessage.trim().split("\s+".toRegex())
+            Regex("^(اضغط|انقر)\\s+(\\d+)\\s+(\\d+)$").containsMatchIn(lowerMessage) -> {
+                val parts = lowerMessage.trim().split("\\s+".toRegex())
                 val x = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 val y = parts.getOrNull(2)?.toIntOrNull() ?: 0
                 clickAtPosition(x, y)
