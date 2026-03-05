@@ -357,6 +357,8 @@ class MyAccessibilityService : AccessibilityService() {
             val child = node.getChild(i) ?: continue
             val result = findNodeByText(child, text)
             if (result != null) {
+                // وجدنا النتيجة — أعد recycle للـ child إن لم يكن هو النتيجة
+                if (result != child) child.recycle()
                 return result
             }
             child.recycle()
@@ -393,6 +395,7 @@ class MyAccessibilityService : AccessibilityService() {
             val child = node.getChild(i) ?: continue
             val result = findNodeById(child, id)
             if (result != null) {
+                if (result != child) child.recycle()
                 return result
             }
             child.recycle()
@@ -545,77 +548,69 @@ class MyAccessibilityService : AccessibilityService() {
     /**
      * إغلاق التطبيق الحالي
      */
-    fun closeCurrentApp(): Boolean {
-        // الطريقة 1: زر الرجوع عدة مرات
-        var success = true
-        repeat(3) {
-            success = success && performBack()
-            Thread.sleep(200)
+    fun closeCurrentApp() {
+        // الرجوع 3 مرات بفاصل 200ms بين كل ضغطة
+        var count = 0
+        fun doBack() {
+            if (count >= 3) return
+            performBack()
+            count++
+            mainHandler.postDelayed(::doBack, 200)
         }
-        
-        // الطريقة 2: إذا لم ينجح، افتح Recent واسحب لإغلاق
-        if (!success) {
-            performRecents()
-        }
-        
-        return success
+        doBack()
     }
 
     /**
      * البحث عن تطبيق معين وإغلاقه من Recent Apps
      */
-    fun closeAppByName(appName: String): Boolean {
-        // فتح Recent Apps
-        if (!performRecents()) return false
-        
-        Thread.sleep(500) // انتظر حتى تفتح
-        
-        // البحث عن التطبيق
-        val rootNode = rootInActiveWindow ?: return false
-        val appNode = findNodeByText(rootNode, appName)
-        
-        if (appNode != null) {
-            // السحب لأعلى لإغلاق التطبيق
-            val bounds = Rect()
-            appNode.getBoundsInScreen(bounds)
-            
-            performSwipe(
-                bounds.centerX().toFloat(),
-                bounds.centerY().toFloat(),
-                bounds.centerX().toFloat(),
-                0f,
-                300
-            )
-            
-            appNode.recycle()
+    fun closeAppByName(appName: String) {
+        if (!performRecents()) return
+
+        // انتظر 500ms حتى تفتح Recent Apps ثم ابحث
+        mainHandler.postDelayed({
+            val rootNode = rootInActiveWindow ?: return@postDelayed
+            val appNode = findNodeByText(rootNode, appName)
+
+            if (appNode != null) {
+                val bounds = Rect()
+                appNode.getBoundsInScreen(bounds)
+                appNode.recycle()
+
+                performSwipe(
+                    bounds.centerX().toFloat(),
+                    bounds.centerY().toFloat(),
+                    bounds.centerX().toFloat(),
+                    0f,
+                    300
+                )
+                Log.d(TAG, "✅ تم إغلاق $appName")
+            } else {
+                Log.d(TAG, "⚠️ لم يُوجد $appName في Recent Apps")
+            }
             rootNode.recycle()
-            return true
-        }
-        
-        rootNode.recycle()
-        return false
+        }, 500)
     }
 
     /**
      * تشغيل/إيقاف الواي فاي من الإعدادات السريعة
      */
-    fun toggleWifiFromQuickSettings(): Boolean {
-        if (!performQuickSettings()) return false
-        
-        Thread.sleep(500)
-        
-        return clickByText("Wi-Fi") || clickByText("واي فاي") || clickByText("WLAN")
+    fun toggleWifiFromQuickSettings() {
+        if (!performQuickSettings()) return
+
+        mainHandler.postDelayed({
+            clickByText("Wi-Fi") || clickByText("واي فاي") || clickByText("WLAN")
+        }, 500)
     }
 
     /**
      * تشغيل/إيقاف البلوتوث من الإعدادات السريعة
      */
-    fun toggleBluetoothFromQuickSettings(): Boolean {
-        if (!performQuickSettings()) return false
-        
-        Thread.sleep(500)
-        
-        return clickByText("Bluetooth") || clickByText("بلوتوث")
+    fun toggleBluetoothFromQuickSettings() {
+        if (!performQuickSettings()) return
+
+        mainHandler.postDelayed({
+            clickByText("Bluetooth") || clickByText("بلوتوث")
+        }, 500)
     }
 
     companion object {
