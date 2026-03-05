@@ -405,6 +405,103 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * البحث عن كل العناصر من نوع معين (مثل Button, EditText, ImageView)
+     * تُرجع قائمة — المستدعي مسؤول عن recycle لكل عنصر فيها
+     */
+    fun findAllByClass(node: AccessibilityNodeInfo, className: String): List<AccessibilityNodeInfo> {
+        val results = mutableListOf<AccessibilityNodeInfo>()
+
+        if (node.className?.contains(className, ignoreCase = true) == true) {
+            results.add(node)
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val childResults = findAllByClass(child, className)
+            results.addAll(childResults)
+            // أعد recycle للـ child فقط إذا لم يكن ضمن النتائج
+            if (!childResults.contains(child)) child.recycle()
+        }
+
+        return results
+    }
+
+    /**
+     * البحث عن أول عنصر يحقق شرطاً معيناً
+     * مثال: findByProperty(root) { it.isClickable && it.isEnabled }
+     */
+    fun findByProperty(
+        node: AccessibilityNodeInfo,
+        check: (AccessibilityNodeInfo) -> Boolean
+    ): AccessibilityNodeInfo? {
+        if (check(node)) return node
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findByProperty(child, check)
+            if (result != null) {
+                if (result != child) child.recycle()
+                return result
+            }
+            child.recycle()
+        }
+
+        return null
+    }
+
+    /**
+     * البحث عن العنصر الموجود عند إحداثيات معينة على الشاشة
+     * يُرجع أدق عنصر (الأصغر) يحتوي النقطة المطلوبة
+     */
+    fun findByPosition(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+
+        // إذا كانت الإحداثيات خارج هذا العنصر — تجاهله
+        if (!bounds.contains(x, y)) return null
+
+        // ابحث في الأبناء أولاً — الابن أدق من الأب
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findByPosition(child, x, y)
+            if (result != null) {
+                if (result != child) child.recycle()
+                return result
+            }
+            child.recycle()
+        }
+
+        // لم يوجد ابن أدق — هذا العنصر هو الأدق
+        return node
+    }
+
+    /**
+     * البحث عن عنصر بالـ ContentDescription (وصف الأيقونات للمكفوفين)
+     * مفيد للأيقونات التي ليس لها نص ظاهر
+     */
+    fun findByDescription(
+        node: AccessibilityNodeInfo,
+        description: String
+    ): AccessibilityNodeInfo? {
+        if (node.contentDescription?.toString()?.contains(description, ignoreCase = true) == true) {
+            return node
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findByDescription(child, description)
+            if (result != null) {
+                if (result != child) child.recycle()
+                return result
+            }
+            child.recycle()
+        }
+
+        return null
+    }
+
+
+    /**
      * الكتابة في حقل نصي
      */
     fun writeToField(fieldId: String, text: String): Boolean {
