@@ -44,10 +44,7 @@ class CommandHandler(private val context: Context) {
                     results.add(result)
                 }
                 
-                // انتظار بسيط بين الأوامر (500ms)
-                if (index < commands.size - 1) {
-                    Thread.sleep(500)
-                }
+                // لا انتظار هنا — الترتيب يتحكم فيه executeMultipleCommands في MainActivity
             }
         }
         
@@ -507,16 +504,7 @@ class CommandHandler(private val context: Context) {
         val service = MyAccessibilityService.getInstance()
         
         return if (service != null) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                val success = service.closeAppByName(appName)
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    if (success) {
-                        Toast.makeText(context, "✅ تم إغلاق $appName", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "⚠️ لم أجد $appName في التطبيقات الأخيرة", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }, 100)
+            service.closeAppByName(appName)
             "🔄 جاري إغلاق $appName...\n\nسأفتح Recent Apps وأبحث عن التطبيق"
         } else {
             "⚠️ يجب تفعيل خدمة إمكانية الوصول\n\n✅ خطوات التفعيل:\n1. اضغط على ⚙️ في الأسفل\n2. اضغط \"فتح إعدادات إمكانية الوصول\"\n3. فعّل \"أواب AI\""
