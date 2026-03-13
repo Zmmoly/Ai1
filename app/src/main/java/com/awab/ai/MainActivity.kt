@@ -557,13 +557,21 @@ class MainActivity : AppCompatActivity() {
             "open_app" to Regex("(?:افتح|شغل|فتح)\\s+([^،,\\n]+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
             "close_app" to Regex("(?:أقفل|اقفل|سكر)\\s+([^،,\\n]+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
             "call" to Regex("(?:اتصل\\s+ب|اضرب\\s+ل|اتصل|كلم)\\s+([^،,\\n]+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
-            "volume" to Regex("(على\\s+الصوت|خفض\\s+الصوت|كتم\\s+الصوت)", RegexOption.IGNORE_CASE),
-            "settings" to Regex("(شغل\\s+الواي\\s+فاي|اطفي\\s+الواي\\s+فاي|شغل\\s+البلوتوث|اطفي\\s+البلوتوث)", RegexOption.IGNORE_CASE),
-            "system" to Regex("(رجوع|ارجع|back|هوم|home|الشاشة\\s+الرئيسية|recent|التطبيقات\\s+الأخيرة)", RegexOption.IGNORE_CASE),
+            "volume" to Regex("(على\\s+الصوت|ارفع\\s+الصوت|زود\\s+الصوت|خفض\\s+الصوت|قلل\\s+الصوت|نزل\\s+الصوت|كتم\\s+الصوت|اسكت)", RegexOption.IGNORE_CASE),
+            "settings" to Regex("(شغل\\s+الواي\\s+فاي|شغل\\s+الوايفاي|اطفي\\s+الواي\\s+فاي|اطفي\\s+الوايفاي|شغل\\s+البلوتوث|اطفي\\s+البلوتوث|شغل\\s+النت|شغل\\s+البيانات|اطفي\\s+النت|اطفي\\s+البيانات|شغل\\s+وضع\\s+الطيران|airplane\\s+mode|شغل\\s+نقطة\\s+اتصال|هوت\\s+سبوت|hotspot)", RegexOption.IGNORE_CASE),
+            "system" to Regex("(رجوع|ارجع|back|هوم|home|الشاشة\\s+الرئيسية|recent|recents|التطبيقات\\s+الأخيرة)", RegexOption.IGNORE_CASE),
             "screenshot" to Regex("(سكرين\\s+شوت|لقطة\\s+شاشة|screenshot)", RegexOption.IGNORE_CASE),
-            "read_screen" to Regex("(اقرا\\s+الشاشة|ماذا\\s+في\\s+الشاشة)", RegexOption.IGNORE_CASE),
+            "read_screen" to Regex("(اقرا\\s+الشاشة|ماذا\\s+في\\s+الشاشة|read\\s+screen)", RegexOption.IGNORE_CASE),
+            "screen_elements" to Regex("(عناصر\\s+الشاشة|عناصر\\s+قابلة\\s+للنقر)", RegexOption.IGNORE_CASE),
+            "rotate_screen" to Regex("(قلب\\s+الشاشة|دور\\s+الشاشة)", RegexOption.IGNORE_CASE),
             "click" to Regex("(?:اضغط\\s+على|انقر\\s+على)\\s+(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
-            "notifications" to Regex("(?:افتح\\s+)?(?:الإشعارات|الاشعارات)", RegexOption.IGNORE_CASE)
+            "click_first" to Regex("(اضغط\\s+على\\s+أول\\s+زر|انقر\\s+على\\s+أول\\s+زر|اضغط\\s+على\\s+أول\\s+حقل|انقر\\s+على\\s+أول\\s+حقل|اضغط\\s+على\\s+أول\\s+صورة|انقر\\s+على\\s+أول\\s+صورة)", RegexOption.IGNORE_CASE),
+            "click_id" to Regex("(?:اضغط|انقر)\\s+id/(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
+            "click_desc" to Regex("(?:اضغط|انقر)\\s+وصف\\s+(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
+            "notifications" to Regex("(?:افتح\\s+)?(?:الإشعارات|الاشعارات|notifications)", RegexOption.IGNORE_CASE),
+            "list_apps" to Regex("(اعرض\\s+التطبيقات|كل\\s+التطبيقات|قائمة\\s+التطبيقات|list\\s+apps)", RegexOption.IGNORE_CASE),
+            "watch" to Regex("راقب\\s+(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
+            "stop_watch" to Regex("(أوقف\\s+مراقبة|اوقف\\s+مراقبة|أوقف\\s+المراقبة|اوقف\\s+المراقبة|مراقبات\\s+نشطة|المراقبات)", RegexOption.IGNORE_CASE)
         )
 
         for ((type, pattern) in commandPatterns) {
@@ -580,6 +588,9 @@ class MainActivity : AppCompatActivity() {
                         else fullMatch
                     }
                     "click" -> "اضغط على ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
+                    "click_id" -> "اضغط id/${match.groupValues.getOrNull(1)?.trim() ?: ""}"
+                    "click_desc" -> "اضغط وصف ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
+                    "watch" -> "راقب ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
                     else -> fullMatch
                 }
                 val response = commandHandler.handleCommand(command)
@@ -621,7 +632,8 @@ class MainActivity : AppCompatActivity() {
                 )
                 maxWidth = (resources.displayMetrics.widthPixels * 0.75).toInt()
                 setTextIsSelectable(true)
-                isFocusable = false  // لا يسرق الفوكس من EditText
+                isFocusable = true
+                isFocusableInTouchMode = true
             })
         }
     }
