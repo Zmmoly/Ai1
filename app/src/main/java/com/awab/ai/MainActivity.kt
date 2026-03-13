@@ -605,13 +605,11 @@ class MainActivity : AppCompatActivity() {
     private fun addUserMessage(message: String) {
         chatContainer.addView(createMessageBubble(message, isUser = true))
         scrollToBottom()
-        inputField.requestFocus()
     }
 
     private fun addBotMessage(message: String) {
         chatContainer.addView(createMessageBubble(message, isUser = false))
         scrollToBottom()
-        inputField.requestFocus()
     }
 
     private fun createMessageBubble(message: String, isUser: Boolean): LinearLayout {
@@ -633,9 +631,16 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
                 maxWidth = (resources.displayMetrics.widthPixels * 0.75).toInt()
-                setTextIsSelectable(true)
-                isFocusable = true
-                isFocusableInTouchMode = true
+                setTextIsSelectable(false)
+                isFocusable = false
+                isLongClickable = true
+                setOnLongClickListener {
+                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("رسالة", message)
+                    clipboard.setPrimaryClip(clip)
+                    android.widget.Toast.makeText(this@MainActivity, "✅ تم نسخ الرسالة", android.widget.Toast.LENGTH_SHORT).show()
+                    true
+                }
             })
         }
     }
