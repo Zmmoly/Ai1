@@ -605,11 +605,13 @@ class MainActivity : AppCompatActivity() {
     private fun addUserMessage(message: String) {
         chatContainer.addView(createMessageBubble(message, isUser = true))
         scrollToBottom()
+        inputField.requestFocus()
     }
 
     private fun addBotMessage(message: String) {
         chatContainer.addView(createMessageBubble(message, isUser = false))
         scrollToBottom()
+        inputField.requestFocus()
     }
 
     private fun createMessageBubble(message: String, isUser: Boolean): LinearLayout {
