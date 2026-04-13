@@ -100,6 +100,13 @@ object StepEngine {
             return Step.Wait(target, waitForShow, timeout, onFound, onTimeout, pkg)
         }
 
+        // انتظر N ثانية — مثال: "انتظر 2 ثانية"
+        Regex("^انتظر\\s+(\\d+)\\s*(?:ثانية|ثواني|ث|s)?$", RegexOption.IGNORE_CASE)
+            .matchEntire(t)?.let { m ->
+                val seconds = m.groupValues[1].toIntOrNull()?.coerceIn(1, 60) ?: 1
+                return Step.Delay(seconds)
+            }
+
         // شرط
         if (t.startsWith("إذا") || t.startsWith("اذا") || t.startsWith("لو ")) {
             return parseIfChain(t)
