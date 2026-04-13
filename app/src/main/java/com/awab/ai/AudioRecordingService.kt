@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit
  * - تبث الصوت لـ Deepgram للتحويل لنص
  * - تحفظ نسخة WAV محلية في نفس الوقت
  * - عند استقبال النص النهائي تُعيد تسمية الملف بنص الرسالة
+ * - تقطع الصمت من نهاية الملف تلقائياً
  */
 class AudioRecordingService : Service() {
 
@@ -41,12 +42,12 @@ class AudioRecordingService : Service() {
 
         const val ACTION_START = "ACTION_START_RECORDING"
         const val ACTION_STOP  = "ACTION_STOP_RECORDING"
-        const val ACTION_RENAME_LAST   = "com.awab.ai.RENAME_LAST"   // أُرسل من MainActivity عند إرسال الرسالة
-        const val EXTRA_FINAL_TEXT     = "extra_final_text"          // النص النهائي لتسمية الملف
+        const val ACTION_RENAME_LAST   = "com.awab.ai.RENAME_LAST"
+        const val EXTRA_FINAL_TEXT     = "extra_final_text"
 
-        const val ACTION_TEXT_RECOGNIZED  = "com.awab.ai.TEXT_RECOGNIZED"
-        const val EXTRA_TEXT              = "extra_text"
-        const val EXTRA_ERROR             = "extra_error"
+        const val ACTION_TEXT_RECOGNIZED   = "com.awab.ai.TEXT_RECOGNIZED"
+        const val EXTRA_TEXT               = "extra_text"
+        const val EXTRA_ERROR              = "extra_error"
         const val ACTION_RECORDING_STARTED = "com.awab.ai.RECORDING_STARTED"
         const val ACTION_RECORDING_STOPPED = "com.awab.ai.RECORDING_STOPPED"
         const val ACTION_VOLUME_CHANGED    = "com.awab.ai.VOLUME_CHANGED"
@@ -75,23 +76,27 @@ class AudioRecordingService : Service() {
     private val bufferSize    = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
 
     // ---- VAD ----
-    private val silenceThreshold       = 0.01f
     private val silenceFramesBeforeIdle = 50
-    private var silenceFrameCount      = 0
-    private var isIdleMode             = false
+    private var silenceFrameCount       = 0
+    private var isIdleMode              = false
+
+    // ---- Adaptive Noise Floor ----
+    // يتتبع مستوى الضجيج الطبيعي في البيئة ويحدّثه أثناء فترات الصمت
+    private var noiseFloor  = 0.01f   // يبدأ بقيمة افتراضية آمنة
+    private val noiseAlpha  = 0.05f   // سرعة التكيف (بطيء = أكثر استقراراً)
 
     private val apiKey = "bd345e01709fb47368c5d12e56a124f2465fdf8d"
     private var webSocket: WebSocket? = null
     private var audioRecord: AudioRecord? = null
-    private var isRecordingInternal   = false
-    private var recordingJob: Job?    = null
-    private var serviceScope          = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var isRecordingInternal = false
+    private var recordingJob: Job?   = null
+    private var serviceScope         = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
 
     // ---- التسجيل المحلي ----
-    private var currentWavFile: File?         = null  // الملف المؤقت أثناء التسجيل
+    private var currentWavFile: File?          = null
     private var wavOutputStream: FileOutputStream? = null
-    private var totalPcmBytes: Int            = 0     // لحساب حجم WAV header
+    private var totalPcmBytes: Int             = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -105,7 +110,7 @@ class AudioRecordingService : Service() {
             ACTION_RENAME_LAST -> {
                 val text = intent.getStringExtra(EXTRA_FINAL_TEXT) ?: return START_STICKY
                 finalizeWavFile(text)
-                openNewWavFile()   // جاهز للجملة التالية
+                openNewWavFile()
             }
         }
         return START_STICKY
@@ -149,7 +154,6 @@ class AudioRecordingService : Service() {
         webSocket?.close(1000, "إيقاف التسجيل")
         webSocket = null
 
-        // أغلق ملف WAV المؤقت إذا بقي مفتوحاً
         closeWavFile()
 
         releaseWakeLock()
@@ -215,7 +219,7 @@ class AudioRecordingService : Service() {
 
     private fun startAudioCapture() {
         audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION, // أفضل من MIC لتقليل الضجيج
             sampleRate, channelConfig, audioFormat,
             bufferSize * 4
         )
@@ -225,7 +229,6 @@ class AudioRecordingService : Service() {
             return
         }
 
-        // فتح ملف WAV مؤقت لهذه الجلسة
         openNewWavFile()
 
         audioRecord?.startRecording()
@@ -241,15 +244,21 @@ class AudioRecordingService : Service() {
                     val volume = computeVolume(buffer, readSize)
                     sendVolumeUpdate(volume)
 
-                    // احفظ PCM محلياً دائماً (بغض النظر عن الصمت)
+                    // احفظ PCM محلياً دائماً
                     saveRawPcm(buffer, readSize)
 
-                    // VAD → إرسال للخادم فقط عند وجود صوت
-                    if (volume > silenceThreshold) {
+                    // حساب العتبة الديناميكية بناءً على الضجيج
+                    val dynamicThreshold = noiseFloor * 3f
+
+                    if (volume > dynamicThreshold) {
+                        // كلام حقيقي — لا تحدّث noiseFloor
                         silenceFrameCount = 0
-                        if (isIdleMode) { isIdleMode = false }
+                        isIdleMode = false
                         webSocket?.send(ByteString.of(*buffer.copyOfRange(0, readSize)))
                     } else {
+                        // صمت أو ضجيج — حدّث noiseFloor تدريجياً
+                        noiseFloor = noiseAlpha * volume + (1 - noiseAlpha) * noiseFloor
+
                         silenceFrameCount++
                         if (silenceFrameCount >= silenceFramesBeforeIdle && !isIdleMode) {
                             isIdleMode = true
@@ -278,7 +287,6 @@ class AudioRecordingService : Service() {
                     val transcript = alternatives.getJSONObject(0).getString("transcript")
                     if (transcript.isNotEmpty() && isFinal) {
                         Log.d(TAG, "✅ نص: $transcript")
-
                         sendBroadcast(Intent(ACTION_TEXT_RECOGNIZED).apply {
                             putExtra(EXTRA_TEXT, transcript)
                         })
@@ -294,24 +302,23 @@ class AudioRecordingService : Service() {
     // إدارة ملف WAV
     // ============================
 
-    /** يفتح ملفاً مؤقتاً لحفظ PCM الخام ثم كتابة WAV header لاحقاً */
     private fun openNewWavFile() {
         try {
             closeWavFile()
             val dir  = getRecordingsDir(this)
             val temp = File(dir, "recording_${System.currentTimeMillis()}.tmp")
             wavOutputStream = FileOutputStream(temp)
-            // احجز 44 بايت لـ WAV header — ستُكتب لاحقاً
-            wavOutputStream?.write(ByteArray(44))
+            wavOutputStream?.write(ByteArray(44)) // حجز مكان WAV header
             currentWavFile = temp
             totalPcmBytes  = 0
+            // أعد تهيئة noiseFloor لكل تسجيل جديد
+            noiseFloor = 0.01f
             Log.d(TAG, "📂 ملف مؤقت: ${temp.name}")
         } catch (e: Exception) {
             Log.e(TAG, "خطأ فتح ملف: ${e.message}")
         }
     }
 
-    /** يحفظ بيانات PCM الخام في الملف المؤقت */
     private fun saveRawPcm(buffer: ByteArray, size: Int) {
         try {
             wavOutputStream?.write(buffer, 0, size)
@@ -321,7 +328,6 @@ class AudioRecordingService : Service() {
         }
     }
 
-    /** يُغلق الملف المؤقت دون تسمية (في حالة عدم وجود نص) */
     private fun closeWavFile() {
         try {
             wavOutputStream?.flush()
@@ -330,11 +336,6 @@ class AudioRecordingService : Service() {
         } catch (e: Exception) { /* تجاهل */ }
     }
 
-    /**
-     * يُنهي الملف المؤقت:
-     * 1. يكتب WAV header صحيح في بداية الملف
-     * 2. يعيد تسميته بنص الرسالة
-     */
     private fun finalizeWavFile(transcript: String) {
         val file = currentWavFile ?: return
         closeWavFile()
@@ -346,13 +347,18 @@ class AudioRecordingService : Service() {
         }
 
         try {
-            // اكتب WAV header في أول 44 بايت
+            // ✂️ احسب نهاية الكلام الحقيقية وتجاهل الصمت بعده
+            val trimmedBytes = trimSilenceFromEnd(file, totalPcmBytes)
+
+            // اكتب WAV header بالحجم المقطوع
             val raf = RandomAccessFile(file, "rw")
             raf.seek(0)
-            raf.write(buildWavHeader(totalPcmBytes))
+            raf.write(buildWavHeader(trimmedBytes))
+            // اقطع الملف عند نهاية الكلام الحقيقية
+            raf.setLength((trimmedBytes + 44).toLong())
             raf.close()
 
-            // نظّف اسم الملف من الرموز غير المسموح بها
+            // نظّف اسم الملف
             val safeName = transcript
                 .replace(Regex("[\\\\/:*?\"<>|]"), "")
                 .replace(Regex("\\s+"), "_")
@@ -362,7 +368,6 @@ class AudioRecordingService : Service() {
             val dir     = getRecordingsDir(this)
             val wavFile = File(dir, "$safeName.wav")
 
-            // إذا الاسم موجود أضف رقماً
             val finalFile = if (wavFile.exists()) {
                 File(dir, "${safeName}_${System.currentTimeMillis()}.wav")
             } else wavFile
@@ -378,30 +383,67 @@ class AudioRecordingService : Service() {
         }
     }
 
+    /**
+     * يمسح من البداية للنهاية ويتذكر آخر موضع فيه كلام حقيقي
+     * ثم يُضيف 300ms هامش بعده ويحذف ما تبقى
+     */
+    private fun trimSilenceFromEnd(file: File, totalPcmBytes: Int): Int {
+        val threshold      = (noiseFloor * 3f).coerceAtLeast(0.01f)
+        val keepSilenceMs  = 300  // ms نحتفظ بها بعد آخر كلمة
+        val keepSilenceBytes = sampleRate * 2 * keepSilenceMs / 1000
+        val frameSizeBytes = 320  // ~10ms عند 16000Hz
+
+        val raf = RandomAccessFile(file, "r")
+        val buffer = ByteArray(frameSizeBytes)
+        var lastSpeechPos = 44 // بداية بيانات PCM (بعد الـ header)
+        var pos = 44
+
+        // امشِ من البداية للنهاية وسجّل آخر إطار فيه كلام
+        while (pos + frameSizeBytes <= totalPcmBytes + 44) {
+            raf.seek(pos.toLong())
+            val read = raf.read(buffer)
+            if (read <= 0) break
+
+            val volume = computeVolume(buffer, read)
+            if (volume > threshold) {
+                lastSpeechPos = pos + read
+            }
+            pos += frameSizeBytes
+        }
+
+        raf.close()
+
+        // أضف هامش 300ms بعد آخر كلام
+        val trimmedPcm = ((lastSpeechPos - 44) + keepSilenceBytes)
+            .coerceIn(0, totalPcmBytes)
+
+        val savedMs = ((totalPcmBytes - trimmedPcm).toFloat() / (sampleRate * 2)) * 1000
+        Log.d(TAG, "✂️ حُذف ${savedMs.toInt()} ms من الصمت (threshold: $threshold)")
+
+        return trimmedPcm
+    }
+
     /** يبني WAV header بحجم 44 بايت */
     private fun buildWavHeader(pcmBytes: Int): ByteArray {
-        val totalDataLen  = pcmBytes + 36
-        val byteRate      = sampleRate * 1 * 16 / 8  // sampleRate × channels × bitsPerSample / 8
-        val blockAlign    = 1 * 16 / 8
+        val totalDataLen = pcmBytes + 36
+        val byteRate     = sampleRate * 1 * 16 / 8
+        val blockAlign   = 1 * 16 / 8
 
         return ByteArray(44).also { h ->
-            // RIFF chunk
             h[0]='R'.code.toByte(); h[1]='I'.code.toByte()
             h[2]='F'.code.toByte(); h[3]='F'.code.toByte()
             putInt(h, 4, totalDataLen)
-            h[8]='W'.code.toByte(); h[9]='A'.code.toByte()
+            h[8]='W'.code.toByte();  h[9]='A'.code.toByte()
             h[10]='V'.code.toByte(); h[11]='E'.code.toByte()
-            // fmt chunk
             h[12]='f'.code.toByte(); h[13]='m'.code.toByte()
             h[14]='t'.code.toByte(); h[15]=' '.code.toByte()
-            putInt(h, 16, 16)          // chunk size
-            putShort(h, 20, 1)         // PCM format
-            putShort(h, 22, 1)         // mono
+            putInt(h, 16, 16)
+            putShort(h, 20, 1)
+            putShort(h, 22, 1)
             putInt(h, 24, sampleRate)
             putInt(h, 28, byteRate)
             putShort(h, 32, blockAlign)
-            putShort(h, 34, 16)        // bits per sample
-            // data chunk
+            putShort(h, 34, 16)
             h[36]='d'.code.toByte(); h[37]='a'.code.toByte()
             h[38]='t'.code.toByte(); h[39]='a'.code.toByte()
             putInt(h, 40, pcmBytes)
@@ -459,7 +501,10 @@ class AudioRecordingService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "التسجيل الصوتي", NotificationManager.IMPORTANCE_LOW).apply {
+            val channel = NotificationChannel(
+                CHANNEL_ID, "التسجيل الصوتي",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
                 description = "إشعار التسجيل في الخلفية"
                 setShowBadge(false)
             }
