@@ -1,3 +1,4 @@
+
 package com.awab.ai
 
 /**
@@ -100,10 +101,16 @@ object StepEngine {
             return Step.Wait(target, waitForShow, timeout, onFound, onTimeout, pkg)
         }
 
-        // انتظر N ثانية — مثال: "انتظر 2 ثانية"
-        Regex("^انتظر\\s+(\\d+)\\s*(?:ثانية|ثواني|ث|s)?$", RegexOption.IGNORE_CASE)
+        // انتظر N ثانية/دقيقة/ساعة — مثال: "انتظر 2 ثانية" / "انتظر 5 دقائق" / "انتظر 1 ساعة"
+        Regex("^انتظر\\s+(\\d+)\\s*(ثانية|ثواني|ث|s|دقيقة|دقايق|دقائق|د|m|ساعة|ساعات|h)?$", RegexOption.IGNORE_CASE)
             .matchEntire(t)?.let { m ->
-                val seconds = m.groupValues[1].toIntOrNull()?.coerceIn(1, 60) ?: 1
+                val value = m.groupValues[1].toIntOrNull() ?: 1
+                val unit  = m.groupValues[2].trim()
+                val seconds = when {
+                    unit.startsWith("دق") || unit == "د" || unit == "m" -> value * 60
+                    unit.startsWith("سا") || unit == "h"                -> value * 3600
+                    else                                                  -> value
+                }.coerceAtLeast(1)
                 return Step.Delay(seconds)
             }
 
