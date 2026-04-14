@@ -803,13 +803,58 @@ class MainActivity : AppCompatActivity() {
                             onDone()
                         }
                     }
-                )
+            // ── قائمة نصوص أو روابط ─────────────────
+            is Step.ItemList -> {
+                val type = if (step.isUrl) "روابط" else "نصوص"
+                addBotMessage("📋 قائمة $type — ${step.items.size} عنصر")
+                executeItemList(step.items, step.isUrl, step.bodySteps, 0, delayMs, onDone)
             }
         }
     }
 
     /**
-     * يحل اسم التطبيق إلى package name
+     * تنفيذ قائمة عناصر بالتسلسل
+     * لكل عنصر: نفّذ الإجراء (فتح رابط أو ضغط نص) ثم نفّذ bodySteps ثم انتقل للتالي
+     */
+    private fun executeItemList(
+        items: List<String>,
+        isUrl: Boolean,
+        bodySteps: List<Step>,
+        current: Int,
+        delayMs: Long,
+        onDone: () -> Unit
+    ) {
+        if (current >= items.size) {
+            addBotMessage("✅ انتهت القائمة (${items.size} عنصر)")
+            onDone()
+            return
+        }
+        val item = items[current]
+        addBotMessage("📌 عنصر ${current + 1}/${items.size}: $item")
+
+        // تنفيذ الإجراء على العنصر الحالي
+        val actionResult = if (isUrl) {
+            commandHandler.handleCommand("افتح رابط $item")
+        } else {
+            commandHandler.handleCommand("اضغط على $item")
+        }
+        addBotMessage(actionResult)
+
+        android.os.Handler(mainLooper).postDelayed({
+            if (bodySteps.isNotEmpty()) {
+                // نفّذ الخطوات على هذا العنصر ثم انتقل للتالي
+                executeStepList(bodySteps, delayMs) {
+                    android.os.Handler(mainLooper).postDelayed({
+                        executeItemList(items, isUrl, bodySteps, current + 1, delayMs, onDone)
+                    }, delayMs)
+                }
+            } else {
+                executeItemList(items, isUrl, bodySteps, current + 1, delayMs, onDone)
+            }
+        }, delayMs)
+    }
+
+    /**
      * يبحث في الأسماء المخصصة أولاً ثم الخريطة الثابتة في StepEngine
      */
     private fun resolveAppPackage(nameOrPackage: String): String {
