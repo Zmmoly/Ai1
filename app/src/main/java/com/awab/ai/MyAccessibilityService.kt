@@ -586,7 +586,7 @@ class MyAccessibilityService : AccessibilityService() {
                 ok
             } else {
                 // آخر محاولة: performGlobalAction PASTE
-                performGlobalAction(GLOBAL_ACTION_PASTE)
+                performGlobalAction(AccessibilityService.GLOBAL_ACTION_PASTE)
             }
 
             root.recycle()
