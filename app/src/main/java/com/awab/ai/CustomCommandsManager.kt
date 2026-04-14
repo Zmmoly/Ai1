@@ -147,6 +147,17 @@ object CustomCommandsManager {
                 continue
             }
 
+            // قائمة نصوص أو روابط — كل الخطوات التالية تصبح "جسم" القائمة
+            val parsedLine = StepEngine.parse(line)
+            if (parsedLine is Step.ItemList) {
+                val remainingLines = lines.subList(i + 1, lines.size)
+                    .filter { it.trim().isNotBlank() }
+                val bodySteps = remainingLines.map { StepEngine.parse(it.trim()) }
+                steps.add(parsedLine.copy(bodySteps = bodySteps))
+                // انتهى التحليل — القائمة تستهلك كل الخطوات التالية
+                return Pair(steps, lines.size)
+            }
+
             // خطوة عادية (تمر على StepEngine لدعم كرر / انتظر / إذا)
             steps.add(StepEngine.parse(line))
             i++
@@ -176,6 +187,8 @@ object CustomCommandsManager {
         "شغل وضع الطيران",
         "اضغط على [نص]",
         "اقرا الشاشة",
-        "انتظر [N] ثانية"
+        "انتظر [N] ثانية",
+        "قائمة نصوص: [نص1] | [نص2] | [نص3]",
+        "قائمة روابط: [رابط1] | [رابط2]"
     )
 }
