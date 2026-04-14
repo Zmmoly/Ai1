@@ -963,11 +963,13 @@ class MainActivity : AppCompatActivity() {
     private fun setupAppTriggers() {
         MyAccessibilityService.getInstance()?.onAppOpened = { packageName ->
             val prefs = getSharedPreferences("app_triggers", MODE_PRIVATE)
-            val action = prefs.getString(packageName, null) ?: return@onAppOpened
-            runOnUiThread {
-                addBotMessage("⚡ فتحت تطبيقاً — جاري تنفيذ: $action")
-                val response = commandHandler.handleCommand(action)
-                if (response != null) addBotMessage(response)
+            val action = prefs.getString(packageName, null)
+            if (action != null) {
+                runOnUiThread {
+                    addBotMessage("⚡ فتحت تطبيقاً — جاري تنفيذ: $action")
+                    val response = commandHandler.handleCommand(action)
+                    if (response != null) addBotMessage(response)
+                }
             }
         }
     }
