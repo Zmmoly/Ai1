@@ -56,6 +56,22 @@ sealed class Step {
 
     /** انتظر N ثانية بدون شرط */
     data class Delay(val seconds: Int) : Step()
+
+    /**
+     * قائمة عناصر تُنفَّذ بالتسلسل
+     * @param items   قائمة النصوص أو الروابط
+     * @param isUrl   true = روابط تُفتح في المتصفح / false = نصوص تُضغط عليها في الشاشة
+     * @param bodySteps الخطوات التي تُنفَّذ على كل عنصر (الخطوات التالية في الأمر)
+     *
+     * صيغة النص:
+     *   قائمة نصوص: نص1 | نص2 | نص3
+     *   قائمة روابط: https://... | https://...
+     */
+    data class ItemList(
+        val items: List<String>,
+        val isUrl: Boolean,
+        val bodySteps: List<Step> = emptyList()   // تُملأ وقت التنفيذ
+    ) : Step()
 }
 
 // ===== المحرك =====
@@ -113,6 +129,24 @@ object StepEngine {
                 }.coerceAtLeast(1)
                 return Step.Delay(seconds)
             }
+
+        // قائمة نصوص: "قائمة نصوص: نص1 | نص2 | نص3"
+        Regex(
+            "^قائمة\\s+نصوص\\s*:\\s*(.+)$",
+            RegexOption.IGNORE_CASE
+        ).matchEntire(t)?.let { m ->
+            val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
+            return Step.ItemList(items, isUrl = false)
+        }
+
+        // قائمة روابط: "قائمة روابط: https://... | https://..."
+        Regex(
+            "^قائمة\\s+روابط\\s*:\\s*(.+)$",
+            RegexOption.IGNORE_CASE
+        ).matchEntire(t)?.let { m ->
+            val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
+            return Step.ItemList(items, isUrl = true)
+        }
 
         // شرط
         if (t.startsWith("إذا") || t.startsWith("اذا") || t.startsWith("لو ")) {
@@ -289,6 +323,14 @@ object StepEngine {
             step.onFound?.let   { append(" ثم $it") }
             step.onTimeout?.let { append(" وإلا $it") }
         }
+
+        is Step.ItemList -> buildString {
+            val type = if (step.isUrl) "روابط" else "نصوص"
+            appendLine("$indent📋 قائمة $type (${step.items.size} عنصر):")
+            step.items.forEachIndexed { i, item ->
+                appendLine("$indent    ${i + 1}. $item")
+            }
+        }.trimEnd()
     }
 
     // ─── تلميحات الصيغ ─────────────────────
@@ -326,5 +368,11 @@ object StepEngine {
 🔗 شروط مركبة:
   إذا تحتوي A و تحتوي B → أمر
   إذا تحتوي A أو تحتوي B → أمر
+
+📋 قائمة نصوص (اضغط على كل نص بالتسلسل):
+  قائمة نصوص: أحمد | محمد | سارة
+
+🔗 قائمة روابط (افتح كل رابط بالتسلسل):
+  قائمة روابط: https://site1.com | https://site2.com
 """.trim()
 }
