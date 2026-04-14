@@ -203,6 +203,10 @@ class MyAccessibilityService : AccessibilityService() {
 
     private val hasActiveTasks = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    // ===== كشف فتح التطبيقات =====
+    private var lastOpenedPackage: String = ""
+    var onAppOpened: ((packageName: String) -> Unit)? = null
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val ev = event ?: return
 
@@ -211,6 +215,14 @@ class MyAccessibilityService : AccessibilityService() {
 
         val root = rootInActiveWindow ?: return
         val currentPkg = root.packageName?.toString() ?: return
+
+        // ===== كشف فتح تطبيق جديد =====
+        if (ev.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            currentPkg != lastOpenedPackage &&
+            currentPkg != "com.awab.ai") {
+            lastOpenedPackage = currentPkg
+            mainHandler.post { onAppOpened?.invoke(currentPkg) }
+        }
 
         // ===== معالجة WaitTasks =====
         if (hasActiveTasks.get()) {
@@ -548,7 +560,7 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * السحب على الشاشة (Swipe) مع حركة طبيعية
+     * السحب على الشاشة (Swipe)
      */
     fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 300): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
@@ -567,19 +579,12 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * تمرير طبيعي يشبه الإصبع الحقيقي
-     * - نقطة البداية والنهاية تتغير عشوائياً قليلاً كل مرة
-     * - المسار منحنٍ وليس مستقيماً
-     * - السرعة تتغير عشوائياً
      */
     fun performNaturalScroll(direction: String, screenWidth: Int, screenHeight: Int): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
 
         val rand = java.util.Random()
-
-        // عشوائية ±5% في المنتصف الأفقي
         val centerX = screenWidth * (0.45f + rand.nextFloat() * 0.10f)
-
-        // عشوائية في نقاط البداية والنهاية
         val randomOffset = screenHeight * (rand.nextFloat() * 0.05f)
 
         val (startX, startY, endX, endY) = when (direction) {
@@ -610,7 +615,6 @@ class MyAccessibilityService : AccessibilityService() {
             else -> return false
         }
 
-        // منحنى طبيعي بدل خط مستقيم
         val midX = (startX + endX) / 2f + (rand.nextFloat() - 0.5f) * screenWidth * 0.03f
         val midY = (startY + endY) / 2f + (rand.nextFloat() - 0.5f) * screenHeight * 0.03f
 
@@ -619,11 +623,9 @@ class MyAccessibilityService : AccessibilityService() {
             quadTo(midX, midY, endX, endY)
         }
 
-        // سرعة عشوائية بين 250 و 450ms
-        val duration = (250 + rand.nextInt(200)).toLong()
-
+        val dur = (250 + rand.nextInt(200)).toLong()
         val gestureBuilder = GestureDescription.Builder()
-        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, dur))
         return dispatchGesture(gestureBuilder.build(), null, null)
     }
 
