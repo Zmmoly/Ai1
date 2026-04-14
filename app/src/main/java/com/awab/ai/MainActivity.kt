@@ -536,8 +536,9 @@ class MainActivity : AppCompatActivity() {
             lower.contains("مرحبا") || lower.contains("السلام") || lower.contains("هلا") ->
                 "مرحباً بك! 👋\n\nأنا مساعدك الذكي. يمكنني:\n\n🧠 الذاكرة:\n• \"تذكر أن سعر الهاتف هو 500\"\n• \"اشتريت تلفاز بسعر 1200\"\n• \"كم سعر الهاتف؟\"\n• \"ماذا تتذكر؟\"\n\n📱 فتح التطبيقات:\n• افتح [اسم أي تطبيق]\n\n📞 الاتصال:\n• اتصل [اسم أو رقم]"
 
-            lower.contains("كيف") || lower.contains("ساعد") || lower.contains("أوامر") ->
-                "📋 الأوامر المتاحة:\n\n🧠 الذاكرة:\n• تذكر أن [شيء] هو [قيمة]\n• اشتريت [شيء] بسعر [قيمة]\n• كم سعر [شيء]؟\n• ذكرني بـ [شيء]\n• ماذا تتذكر؟\n• امسح [شيء]\n\n📱 التطبيقات:\n• افتح [اسم التطبيق]\n• أقفل [اسم التطبيق] ⭐\n\n📞 الاتصال:\n• اتصل ب[اسم]\n• اضرب ل[اسم]\n\n⚙️ الإعدادات:\n• شغل الواي فاي ⭐\n• سكرين شوت ⭐\n\n⭐ = يحتاج Accessibility"
+            lower.contains("كيف") || lower.contains("ساعد") || lower.contains("أوامر") ||
+            lower.contains("اوامر") || lower == "help" || lower == "مساعدة" ->
+                commandHandler.handleCommand("اوامر")
 
             lower.contains("إعدادات") || lower.contains("settings") -> {
                 openSettings()
