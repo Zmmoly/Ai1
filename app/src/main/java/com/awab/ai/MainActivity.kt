@@ -803,6 +803,9 @@ class MainActivity : AppCompatActivity() {
                             onDone()
                         }
                     }
+                )
+            }
+
             // ── قائمة نصوص أو روابط ─────────────────
             is Step.ItemList -> {
                 val type = if (step.isUrl) "روابط" else "نصوص"
