@@ -64,6 +64,23 @@ class CommandHandler(private val context: Context) {
                 listInstalledApps()
             }
 
+            // فتح رابط في المتصفح
+            lowerMessage.startsWith("افتح رابط") -> {
+                val url = message.substringAfter("افتح رابط").trim()
+                val fullUrl = if (url.startsWith("http://") || url.startsWith("https://")) url
+                              else "https://$url"
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(fullUrl)).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    "✅ فتح الرابط: $fullUrl"
+                } catch (e: Exception) {
+                    "⚠️ تعذر فتح الرابط: $fullUrl"
+                }
+            }
+
             // فتح تطبيق
             lowerMessage.startsWith("افتح") || lowerMessage.startsWith("شغل تطبيق") -> {
                 val appName = message.substringAfter("افتح").substringAfter("شغل تطبيق").trim()
