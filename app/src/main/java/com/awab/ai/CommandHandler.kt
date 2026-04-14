@@ -131,6 +131,43 @@ class CommandHandler(private val context: Context) {
             }
 
             // بيانات الجوال
+            // أوامر التمرير
+            lowerMessage.contains("مرر لأعلى") || lowerMessage.contains("اسحب لأعلى") -> {
+                val service = MyAccessibilityService.getInstance()
+                if (service != null) {
+                    val dm = context.resources.displayMetrics
+                    service.performNaturalScroll("up", dm.widthPixels, dm.heightPixels)
+                    "✅ تم التمرير لأعلى"
+                } else "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+            }
+
+            lowerMessage.contains("مرر لأسفل") || lowerMessage.contains("اسحب لأسفل") -> {
+                val service = MyAccessibilityService.getInstance()
+                if (service != null) {
+                    val dm = context.resources.displayMetrics
+                    service.performNaturalScroll("down", dm.widthPixels, dm.heightPixels)
+                    "✅ تم التمرير لأسفل"
+                } else "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+            }
+
+            lowerMessage.contains("مرر لليمين") || lowerMessage.contains("اسحب لليمين") -> {
+                val service = MyAccessibilityService.getInstance()
+                if (service != null) {
+                    val dm = context.resources.displayMetrics
+                    service.performNaturalScroll("right", dm.widthPixels, dm.heightPixels)
+                    "✅ تم التمرير لليمين"
+                } else "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+            }
+
+            lowerMessage.contains("مرر لليسار") || lowerMessage.contains("اسحب لليسار") -> {
+                val service = MyAccessibilityService.getInstance()
+                if (service != null) {
+                    val dm = context.resources.displayMetrics
+                    service.performNaturalScroll("left", dm.widthPixels, dm.heightPixels)
+                    "✅ تم التمرير لليسار"
+                } else "⚠️ يجب تفعيل خدمة إمكانية الوصول"
+            }
+
             lowerMessage.contains("شغل النت") || lowerMessage.contains("شغل البيانات") -> {
                 openMobileDataSettings("لتشغيل بيانات الجوال")
             }
