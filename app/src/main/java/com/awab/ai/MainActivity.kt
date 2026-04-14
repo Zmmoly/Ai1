@@ -812,6 +812,12 @@ class MainActivity : AppCompatActivity() {
                 addBotMessage("📋 قائمة $type — ${step.items.size} عنصر")
                 executeItemList(step.items, step.isUrl, step.bodySteps, 0, delayMs, onDone)
             }
+
+            // ── لكل عنصر في القائمة ──────────────────
+            is Step.ForEach -> {
+                addBotMessage("🔄 قائمة — ${step.items.size} عنصر")
+                executeForEach(step.items, step.bodySteps, 0, delayMs, onDone)
+            }
         }
     }
 
@@ -855,6 +861,57 @@ class MainActivity : AppCompatActivity() {
                 executeItemList(items, isUrl, bodySteps, current + 1, delayMs, onDone)
             }
         }, delayMs)
+    }
+
+    /**
+     * تنفيذ حلقة ForEach — لكل عنصر يستبدل كلمة "عنصر" في الخطوات بالنص الحالي
+     */
+    private fun executeForEach(
+        items: List<String>,
+        bodySteps: List<Step>,
+        current: Int,
+        delayMs: Long,
+        onDone: () -> Unit
+    ) {
+        if (current >= items.size) {
+            addBotMessage("✅ انتهت القائمة (${items.size} عنصر)")
+            onDone()
+            return
+        }
+        val item = items[current]
+        addBotMessage("🔄 عنصر ${current + 1}/${items.size}: $item")
+
+        // استبدل كلمة "عنصر" بالنص الحالي في كل الخطوات
+        val resolvedSteps = bodySteps.map { step -> replaceItemInStep(step, item) }
+
+        android.os.Handler(mainLooper).postDelayed({
+            if (resolvedSteps.isNotEmpty()) {
+                executeStepList(resolvedSteps, delayMs) {
+                    android.os.Handler(mainLooper).postDelayed({
+                        executeForEach(items, bodySteps, current + 1, delayMs, onDone)
+                    }, delayMs)
+                }
+            } else {
+                executeForEach(items, bodySteps, current + 1, delayMs, onDone)
+            }
+        }, delayMs)
+    }
+
+    /**
+     * يستبدل كلمة "عنصر" بالنص الفعلي في خطوة معينة بشكل متكرر
+     */
+    private fun replaceItemInStep(step: Step, item: String): Step = when (step) {
+        is Step.Normal   -> step.copy(command = step.command.replace("عنصر", item))
+        is Step.Loop     -> step.copy(body = step.body.map { replaceItemInStep(it, item) })
+        is Step.IfChain  -> step.copy(
+            branches = step.branches.map { b ->
+                b.copy(steps = b.steps.map { replaceItemInStep(it, item) })
+            },
+            elseBranch = step.elseBranch?.map { replaceItemInStep(it, item) }
+        )
+        is Step.ForEach  -> step.copy(bodySteps = step.bodySteps.map { replaceItemInStep(it, item) })
+        is Step.ItemList -> step.copy(bodySteps = step.bodySteps.map { replaceItemInStep(it, item) })
+        else             -> step
     }
 
     /**
