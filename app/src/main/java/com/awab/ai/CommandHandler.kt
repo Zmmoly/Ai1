@@ -214,6 +214,15 @@ class CommandHandler(private val context: Context) {
                 readScreen()
             }
 
+            // ── كتابة نص في الحقل النشط ──
+            lowerMessage.startsWith("اكتب ") || lowerMessage.startsWith("كتب ") ||
+            lowerMessage.startsWith("write ") || lowerMessage.startsWith("type ") -> {
+                val text = message
+                    .removePrefix("اكتب ").removePrefix("كتب ")
+                    .removePrefix("write ").removePrefix("type ").trim()
+                typeText(text)
+            }
+
             // الضغط على عنصر بالنص
             lowerMessage.startsWith("اضغط على") || lowerMessage.startsWith("انقر على") -> {
                 val text = message.substringAfter("اضغط على").substringAfter("انقر على").trim()
@@ -960,6 +969,20 @@ class CommandHandler(private val context: Context) {
         } else {
             "⚠️ لم أجد عناصر قابلة للنقر في الشاشة الحالية"
         }
+    }
+
+
+    /** كتابة نص في الحقل النشط في أي تطبيق */
+    private fun typeText(text: String): String {
+        if (text.isBlank()) return "ما النص الذي تريد كتابته؟"
+
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول من الإعدادات"
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            service.typeTextInFocusedField(text)
+        }
+        return "✅ جاري كتابة: \"$text\""
     }
 
 
