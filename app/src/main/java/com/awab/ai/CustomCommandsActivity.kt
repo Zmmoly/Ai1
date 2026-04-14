@@ -238,11 +238,12 @@ class CustomCommandsActivity : AppCompatActivity() {
             cmd.steps.forEachIndexed { i, raw ->
                 val step = StepEngine.parse(raw)
                 val color = when (step) {
-                    is Step.Normal  -> 0xFF444444.toInt()
-                    is Step.IfChain -> 0xFF1565C0.toInt()
-                    is Step.Loop    -> 0xFF6A1B9A.toInt()
-                    is Step.Wait    -> 0xFF00796B.toInt()
-                    is Step.Delay   -> 0xFFE65100.toInt()
+                    is Step.Normal   -> 0xFF444444.toInt()
+                    is Step.IfChain  -> 0xFF1565C0.toInt()
+                    is Step.Loop     -> 0xFF6A1B9A.toInt()
+                    is Step.Wait     -> 0xFF00796B.toInt()
+                    is Step.Delay    -> 0xFFE65100.toInt()
+                    is Step.ItemList -> if (step.isUrl) 0xFF0277BD.toInt() else 0xFF00897B.toInt()
                 }
                 addView(TextView(this@CustomCommandsActivity).apply {
                     text = "${i + 1}. ${StepEngine.describe(step)}"
@@ -341,6 +342,17 @@ class CustomCommandsActivity : AppCompatActivity() {
         btnRow.addView(makeAddBtn("⏳ انتظار", 0xFF00796B.toInt(),
             "انتظر ظهور [نص] لمدة 15 ثانية ثم اضغط على [نص]"))
         container.addView(btnRow)
+
+        // صف أزرار القوائم
+        val listBtnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, 4)
+        }
+        listBtnRow.addView(makeAddBtn("📋 قائمة نصوص", 0xFF00897B.toInt(),
+            "قائمة نصوص: [نص1] | [نص2] | [نص3]"))
+        listBtnRow.addView(makeAddBtn("🔗 قائمة روابط", 0xFF0277BD.toInt(),
+            "قائمة روابط: [https://رابط1] | [https://رابط2]"))
+        container.addView(listBtnRow)
 
         // تلميح الصيغ
         container.addView(label("💡 صيغ الخطوات:"))
