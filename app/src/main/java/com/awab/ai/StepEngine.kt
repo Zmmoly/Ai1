@@ -58,6 +58,20 @@ sealed class Step {
     data class Delay(val seconds: Int) : Step()
 
     /**
+     * حلقة على قائمة نصوص — ينفذ bodySteps على كل عنصر
+     * الكلمة "عنصر" في أي خطوة تُستبدل بالنص الحالي
+     *
+     * صيغة النص:
+     *   قائمة: نص1 | نص2 | نص3
+     *   الصق عنصر
+     *   انتظر 1 ثانية
+     */
+    data class ForEach(
+        val items: List<String>,
+        val bodySteps: List<Step> = emptyList()   // تُملأ وقت البناء
+    ) : Step()
+
+    /**
      * قائمة عناصر تُنفَّذ بالتسلسل
      * @param items   قائمة النصوص أو الروابط
      * @param isUrl   true = روابط تُفتح في المتصفح / false = نصوص تُضغط عليها في الشاشة
@@ -129,6 +143,15 @@ object StepEngine {
                 }.coerceAtLeast(1)
                 return Step.Delay(seconds)
             }
+
+        // قائمة: "قائمة: نص1 | نص2 | نص3"
+        Regex(
+            "^قائمة\\s*:\\s*(.+)$",
+            RegexOption.IGNORE_CASE
+        ).matchEntire(t)?.let { m ->
+            val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
+            return Step.ForEach(items)
+        }
 
         // قائمة نصوص: "قائمة نصوص: نص1 | نص2 | نص3"
         Regex(
@@ -331,6 +354,17 @@ object StepEngine {
                 appendLine("$indent    ${i + 1}. $item")
             }
         }.trimEnd()
+
+        is Step.ForEach -> buildString {
+            appendLine("$indent🔄 لكل عنصر (${step.items.size} عنصر):")
+            step.items.forEachIndexed { i, item ->
+                appendLine("$indent    ${i + 1}. $item")
+            }
+            if (step.bodySteps.isNotEmpty()) {
+                appendLine("$indent    ── الخطوات ──")
+                step.bodySteps.forEach { appendLine(describe(it, "$indent        ")) }
+            }
+        }.trimEnd()
     }
 
     // ─── تلميحات الصيغ ─────────────────────
@@ -374,5 +408,11 @@ object StepEngine {
 
 🔗 قائمة روابط (افتح كل رابط بالتسلسل):
   قائمة روابط: https://site1.com | https://site2.com
+
+🔄 لكل عنصر في القائمة (نفّذ أوامر على كل نص):
+  قائمة: محمد | أحمد | سارة
+  الصق عنصر
+  انتظر 1 ثانية
+  اضغط على إرسال
 """.trim()
 }
