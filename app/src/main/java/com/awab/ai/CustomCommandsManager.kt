@@ -158,6 +158,16 @@ object CustomCommandsManager {
                 return Pair(steps, lines.size)
             }
 
+            // قائمة: نص1 | نص2 — كل الخطوات التالية تصبح "جسم" الحلقة
+            if (parsedLine is Step.ForEach) {
+                val remainingLines = lines.subList(i + 1, lines.size)
+                    .filter { it.trim().isNotBlank() }
+                val bodySteps = remainingLines.map { StepEngine.parse(it.trim()) }
+                steps.add(parsedLine.copy(bodySteps = bodySteps))
+                // انتهى التحليل — القائمة تستهلك كل الخطوات التالية
+                return Pair(steps, lines.size)
+            }
+
             // خطوة عادية (تمر على StepEngine لدعم كرر / انتظر / إذا)
             steps.add(StepEngine.parse(line))
             i++
