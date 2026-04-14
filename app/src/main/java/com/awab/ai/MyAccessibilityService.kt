@@ -319,6 +319,7 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        context = applicationContext
         setListenPackage(null)  // ابدأ في وضع صامت
         Log.d(TAG, "Accessibility Service connected")
     }
@@ -514,7 +515,94 @@ class MyAccessibilityService : AccessibilityService() {
 
 
     /**
-     * الكتابة في حقل نصي
+     * كتابة نص في الحقل النشط حالياً في أي تطبيق
+     * الطبقة 1: ACTION_SET_TEXT (سريع ونظيف)
+     * الطبقة 2: Clipboard + Paste (يعمل في واتساب وتيليغرام وكل التطبيقات)
+     */
+    fun typeTextInFocusedField(text: String): Boolean {
+        val rootNode = rootInActiveWindow ?: return false
+
+        // ابحث عن الحقل النشط (focused EditText)
+        val focusedNode = findFocusedEditText(rootNode)
+
+        return if (focusedNode != null) {
+            // الطبقة 1: ACTION_SET_TEXT
+            val arguments = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            }
+            val success = focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            focusedNode.recycle()
+
+            if (success) {
+                Log.d(TAG, "✅ كتابة النص بـ ACTION_SET_TEXT")
+                true
+            } else {
+                // الطبقة 2: Clipboard + Paste
+                Log.d(TAG, "⚠️ ACTION_SET_TEXT فشل، جرب Clipboard+Paste")
+                pasteTextViaClipboard(text)
+            }
+        } else {
+            // لا يوجد حقل focused — جرب مباشرة عبر Clipboard+Paste
+            Log.d(TAG, "⚠️ لا يوجد حقل نشط، جرب Clipboard+Paste")
+            pasteTextViaClipboard(text)
+        }
+    }
+
+    /**
+     * البحث عن أول حقل نصي نشط (focused) في الشجرة
+     */
+    private fun findFocusedEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        // أولاً: جرب findFocus الأسرع
+        val focused = node.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (focused != null) return focused
+
+        // ثانياً: ابحث يدوياً في الشجرة
+        return findByProperty(node) { n ->
+            n.isFocused && (
+                n.className?.contains("EditText", ignoreCase = true) == true ||
+                n.isEditable
+            )
+        }
+    }
+
+    /**
+     * الطبقة 2: نسخ النص للـ Clipboard ثم لصقه في الحقل النشط
+     * يعمل في واتساب وتيليغرام وكل التطبيقات
+     */
+    fun pasteTextViaClipboard(text: String): Boolean {
+        return try {
+            val clipboard = context?.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager ?: return false
+            val clip = android.content.ClipData.newPlainText("text", text)
+            clipboard.setPrimaryClip(clip)
+
+            // لصق عبر Accessibility
+            val root = rootInActiveWindow ?: return false
+            val focused = findFocusedEditText(root)
+
+            val result = if (focused != null) {
+                val ok = focused.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                focused.recycle()
+                ok
+            } else {
+                // آخر محاولة: performGlobalAction PASTE
+                performGlobalAction(GLOBAL_ACTION_PASTE)
+            }
+
+            root.recycle()
+            Log.d(TAG, if (result) "✅ لصق النص بنجاح عبر Clipboard" else "❌ فشل اللصق")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ خطأ في pasteTextViaClipboard: ${e.message}")
+            false
+        }
+    }
+
+    // Context مطلوب لـ ClipboardManager
+    private var context: android.content.Context? = null
+
+    /**
+     * الكتابة في حقل نصي بالـ ID (الدالة القديمة — محتفظ بها للتوافق)
      */
     fun writeToField(fieldId: String, text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
