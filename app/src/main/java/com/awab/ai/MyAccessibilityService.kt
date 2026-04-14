@@ -548,7 +548,7 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * السحب على الشاشة (Swipe)
+     * السحب على الشاشة (Swipe) مع حركة طبيعية
      */
     fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 300): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
@@ -562,6 +562,68 @@ class MyAccessibilityService : AccessibilityService() {
         val strokeDescription = GestureDescription.StrokeDescription(path, 0, duration)
         gestureBuilder.addStroke(strokeDescription)
 
+        return dispatchGesture(gestureBuilder.build(), null, null)
+    }
+
+    /**
+     * تمرير طبيعي يشبه الإصبع الحقيقي
+     * - نقطة البداية والنهاية تتغير عشوائياً قليلاً كل مرة
+     * - المسار منحنٍ وليس مستقيماً
+     * - السرعة تتغير عشوائياً
+     */
+    fun performNaturalScroll(direction: String, screenWidth: Int, screenHeight: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+
+        val rand = java.util.Random()
+
+        // عشوائية ±5% في المنتصف الأفقي
+        val centerX = screenWidth * (0.45f + rand.nextFloat() * 0.10f)
+
+        // عشوائية في نقاط البداية والنهاية
+        val randomOffset = screenHeight * (rand.nextFloat() * 0.05f)
+
+        val (startX, startY, endX, endY) = when (direction) {
+            "up"    -> arrayOf(
+                centerX,
+                screenHeight * 0.75f + randomOffset,
+                centerX + (rand.nextFloat() - 0.5f) * screenWidth * 0.04f,
+                screenHeight * 0.25f - randomOffset
+            )
+            "down"  -> arrayOf(
+                centerX,
+                screenHeight * 0.25f - randomOffset,
+                centerX + (rand.nextFloat() - 0.5f) * screenWidth * 0.04f,
+                screenHeight * 0.75f + randomOffset
+            )
+            "right" -> arrayOf(
+                screenWidth  * 0.15f + randomOffset,
+                screenHeight * (0.45f + rand.nextFloat() * 0.10f),
+                screenWidth  * 0.85f - randomOffset,
+                screenHeight * (0.45f + rand.nextFloat() * 0.10f)
+            )
+            "left"  -> arrayOf(
+                screenWidth  * 0.85f - randomOffset,
+                screenHeight * (0.45f + rand.nextFloat() * 0.10f),
+                screenWidth  * 0.15f + randomOffset,
+                screenHeight * (0.45f + rand.nextFloat() * 0.10f)
+            )
+            else -> return false
+        }
+
+        // منحنى طبيعي بدل خط مستقيم
+        val midX = (startX + endX) / 2f + (rand.nextFloat() - 0.5f) * screenWidth * 0.03f
+        val midY = (startY + endY) / 2f + (rand.nextFloat() - 0.5f) * screenHeight * 0.03f
+
+        val path = Path().apply {
+            moveTo(startX, startY)
+            quadTo(midX, midY, endX, endY)
+        }
+
+        // سرعة عشوائية بين 250 و 450ms
+        val duration = (250 + rand.nextInt(200)).toLong()
+
+        val gestureBuilder = GestureDescription.Builder()
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(path, 0, duration))
         return dispatchGesture(gestureBuilder.build(), null, null)
     }
 
