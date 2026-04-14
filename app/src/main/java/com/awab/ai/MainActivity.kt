@@ -571,7 +571,8 @@ class MainActivity : AppCompatActivity() {
             "notifications" to Regex("(?:افتح\\s+)?(?:الإشعارات|الاشعارات|notifications)", RegexOption.IGNORE_CASE),
             "list_apps" to Regex("(اعرض\\s+التطبيقات|كل\\s+التطبيقات|قائمة\\s+التطبيقات|list\\s+apps)", RegexOption.IGNORE_CASE),
             "watch" to Regex("راقب\\s+(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE),
-            "stop_watch" to Regex("(أوقف\\s+مراقبة|اوقف\\s+مراقبة|أوقف\\s+المراقبة|اوقف\\s+المراقبة|مراقبات\\s+نشطة|المراقبات)", RegexOption.IGNORE_CASE)
+            "stop_watch" to Regex("(أوقف\\s+مراقبة|اوقف\\s+مراقبة|أوقف\\s+المراقبة|اوقف\\s+المراقبة|مراقبات\\s+نشطة|المراقبات)", RegexOption.IGNORE_CASE),
+            "type_text" to Regex("(?:اكتب|كتب|write|type)\\s+(.+?)(?=\\s*(?:[،,\\n]|ثم|و(?=\\s)|$))", RegexOption.IGNORE_CASE)
         )
 
         for ((type, pattern) in commandPatterns) {
@@ -591,6 +592,7 @@ class MainActivity : AppCompatActivity() {
                     "click_id" -> "اضغط id/${match.groupValues.getOrNull(1)?.trim() ?: ""}"
                     "click_desc" -> "اضغط وصف ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
                     "watch" -> "راقب ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
+                    "type_text" -> "اكتب ${match.groupValues.getOrNull(1)?.trim() ?: ""}"
                     else -> fullMatch
                 }
                 val response = commandHandler.handleCommand(command)
