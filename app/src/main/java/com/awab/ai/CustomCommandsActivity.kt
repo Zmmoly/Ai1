@@ -244,6 +244,7 @@ class CustomCommandsActivity : AppCompatActivity() {
                     is Step.Wait     -> 0xFF00796B.toInt()
                     is Step.Delay    -> 0xFFE65100.toInt()
                     is Step.ItemList -> if (step.isUrl) 0xFF0277BD.toInt() else 0xFF00897B.toInt()
+                    is Step.ForEach  -> 0xFF558B2F.toInt()
                 }
                 addView(TextView(this@CustomCommandsActivity).apply {
                     text = "${i + 1}. ${StepEngine.describe(step)}"
