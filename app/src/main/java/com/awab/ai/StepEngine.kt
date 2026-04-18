@@ -95,7 +95,7 @@ object StepEngine {
     // ─── تحليل نص الخطوة ───────────────────
 
     fun parse(raw: String): Step {
-        val t = raw.trim().normalizeNumbers()
+        val t = raw.trim().normalizeAll()
 
         // حلقة: "كرر N مرات → ..."
         Regex(
@@ -235,7 +235,7 @@ object StepEngine {
     // ─── تقييم الشروط ──────────────────────
 
     fun evaluateCondition(condition: String): Boolean {
-        val lower = condition.lowercase().trim()
+        val lower = condition.normalizeAll().lowercase().trim()
 
         if (lower in listOf("دائماً","دائما","صح","true","نعم","yes")) return true
         if (lower in listOf("خطأ","خطا","أبداً","false","لا","no"))   return false
@@ -250,7 +250,7 @@ object StepEngine {
         }
 
         val service = MyAccessibilityService.getInstance() ?: return false
-        val screenText = service.getScreenText().lowercase()
+        val screenText = service.getScreenText().normalizeAll().lowercase()
 
         // "تحتوي X" / "يوجد X" / "موجود X"
         Regex("(?:الشاشة\\s+)?(?:تحتوي|يوجد|موجود)\\s+(?:على\\s+)?[\"']?(.+?)[\"']?$")
