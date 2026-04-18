@@ -462,15 +462,95 @@ class CustomCommandsActivity : AppCompatActivity() {
             setOnClickListener {
                 container.removeView(row)
                 stepFields.remove(field)
-                // تحديث أرقام الخطوات
+                refreshStepNumbers(container)
+            }
+        }
+
+        val insertBtn = TextView(this).apply {
+            text = "+"
+            textSize = 16f
+            setTextColor(0xFF4CAF50.toInt())
+            setPadding(8, 0, 4, 0)
+            setOnClickListener {
+                val index = container.indexOfChild(row)
+                addStepRowAt(container, stepFields, "", index)
                 refreshStepNumbers(container)
             }
         }
 
         row.addView(stepNum)
         row.addView(field)
+        row.addView(insertBtn)
         row.addView(deleteBtn)
         container.addView(row)
+        return field
+    }
+
+    private fun addStepRowAt(
+        container: LinearLayout,
+        stepFields: MutableList<EditText>,
+        initialText: String,
+        index: Int
+    ): EditText {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 6, 0, 0) }
+        }
+
+        val stepNum = TextView(this).apply {
+            text = "${index + 1}."
+            textSize = 14f
+            setTextColor(0xFF888888.toInt())
+            setPadding(0, 0, 8, 0)
+            minWidth = 32
+        }
+
+        val field = EditText(this).apply {
+            hint = "أدخل الأمر هنا..."
+            textSize = 14f
+            setPadding(12, 10, 12, 10)
+            setText(initialText)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFF0F0F0.toInt())
+                cornerRadius = 8f
+            }
+        }
+
+        val deleteBtn = TextView(this).apply {
+            text = "✕"
+            textSize = 16f
+            setTextColor(RED)
+            setPadding(12, 0, 0, 0)
+            setOnClickListener {
+                container.removeView(row)
+                stepFields.remove(field)
+                refreshStepNumbers(container)
+            }
+        }
+
+        val insertBtn = TextView(this).apply {
+            text = "+"
+            textSize = 16f
+            setTextColor(0xFF4CAF50.toInt())
+            setPadding(8, 0, 4, 0)
+            setOnClickListener {
+                val idx = container.indexOfChild(row)
+                addStepRowAt(container, stepFields, "", idx)
+                refreshStepNumbers(container)
+            }
+        }
+
+        row.addView(stepNum)
+        row.addView(field)
+        row.addView(insertBtn)
+        row.addView(deleteBtn)
+        container.addView(row, index)
+        stepFields.add(index.coerceAtMost(stepFields.size), field)
         return field
     }
 
