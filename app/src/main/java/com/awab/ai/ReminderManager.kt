@@ -409,7 +409,7 @@ object ReminderManager {
             }
         }
 
-        val numPattern = Regex("(\\d+(?:\\.\\d+)?)\\s*(ثانية|ثواني|دقيقة|دقيقه|دقائق|ساعة|ساعه|ساعات|يوم|أيام|ايام)")
+        val numPattern = Regex("(\\d+(?:\\.\\d+)?)\\s*(ثانيه|ثانية|ثواني|دقيقه|دقيقة|دقايق|دقائق|ساعه|ساعة|ساعات|يوم|ايام)")
         val match = numPattern.find(lower) ?: return null
         val num = match.groupValues[1].toDoubleOrNull() ?: return null
         val unit = match.groupValues[2]
