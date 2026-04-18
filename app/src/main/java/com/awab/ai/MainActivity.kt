@@ -201,7 +201,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleBotResponse(userMessage: String) {
-        val lower = userMessage.lowercase().trim()
+        val lower = userMessage.normalizeAll().lowercase().trim()
 
         // ===== النسخ الاحتياطي =====
 
@@ -1089,3 +1089,4 @@ class MainActivity : AppCompatActivity() {
         // الخدمة تبقى تعمل في الخلفية حتى يضغط المستخدم إيقاف
     }
 }
+؛ ؛ 
