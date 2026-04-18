@@ -902,7 +902,10 @@ class MainActivity : AppCompatActivity() {
         is Step.Loop     -> step.copy(body = step.body.map { replaceItemInStep(it, item) })
         is Step.IfChain  -> step.copy(
             branches = step.branches.map { b ->
-                b.copy(steps = b.steps.map { replaceItemInStep(it, item) })
+                b.copy(
+                    condition = b.condition.replace("عنصر", item),
+                    steps = b.steps.map { replaceItemInStep(it, item) }
+                )
             },
             elseBranch = step.elseBranch?.map { replaceItemInStep(it, item) }
         )
