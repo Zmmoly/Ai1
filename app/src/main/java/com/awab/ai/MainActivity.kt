@@ -1089,4 +1089,3 @@ class MainActivity : AppCompatActivity() {
         // الخدمة تبقى تعمل في الخلفية حتى يضغط المستخدم إيقاف
     }
 }
-؛ ؛ 
