@@ -115,7 +115,7 @@ object StepEngine {
         val waitRegex = Regex(
             "^انتظر\\s+(ظهور|اختفاء)\\s+\\[(.+?)\\]" +
             "(?:\\s+في\\s+([\\w\\u0600-\\u06FF]+))?" +
-            "(?:\\s+لمدة\\s+(\\d+)\\s*(?:ثانية|ثواني|ث))?" +
+            "(?:\\s+لمده\\s+(\\d+)\\s*(?:ثانيه|ثواني|ث))?" +
             "(?:\\s+ثم\\s+(.+?))?" +
             "(?:\\s+وإلا\\s+(.+))?$",
             RegexOption.IGNORE_CASE
@@ -132,7 +132,7 @@ object StepEngine {
         }
 
         // انتظر N ثانية/دقيقة/ساعة — مثال: "انتظر 2 ثانية" / "انتظر 5 دقائق" / "انتظر 1 ساعة"
-        Regex("^انتظر\\s+(\\d+)\\s*(ثانية|ثواني|ث|s|دقيقة|دقايق|دقائق|د|m|ساعة|ساعات|h)?$", RegexOption.IGNORE_CASE)
+        Regex("^انتظر\\s+(\\d+)\\s*(ثانيه|ثانية|ثواني|ث|s|دقيقه|دقيقة|دقايق|دقائق|د|m|ساعه|ساعة|ساعات|h)?$", RegexOption.IGNORE_CASE)
             .matchEntire(t)?.let { m ->
                 val value = m.groupValues[1].toIntOrNull() ?: 1
                 val unit  = m.groupValues[2].trim()
