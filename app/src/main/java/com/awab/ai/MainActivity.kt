@@ -533,9 +533,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val response = when {
-            lower.contains("مرحبا") || lower.contains("السلام") || lower.contains("هلا") ->
-                "مرحباً بك! 👋\n\nأنا مساعدك الذكي. يمكنني:\n\n🧠 الذاكرة:\n• \"تذكر أن سعر الهاتف هو 500\"\n• \"اشتريت تلفاز بسعر 1200\"\n• \"كم سعر الهاتف؟\"\n• \"ماذا تتذكر؟\"\n\n📱 فتح التطبيقات:\n• افتح [اسم أي تطبيق]\n\n📞 الاتصال:\n• اتصل [اسم أو رقم]"
-
+            lower.contains("مرحبا") || lower.contains("السلام") || lower.contains("هلا") ||
             lower.contains("كيف") || lower.contains("ساعد") || lower.contains("أوامر") ||
             lower.contains("اوامر") || lower == "help" || lower == "مساعدة" ->
                 commandHandler.handleCommand("اوامر")
@@ -544,7 +542,6 @@ class MainActivity : AppCompatActivity() {
                 openSettings()
                 "سأفتح لك صفحة الإعدادات..."
             }
-
             else ->
                 "لم أفهم 🤔\n\nجرب:\n• \"أوامر\" - لرؤية كل الأوامر\n• \"افتح واتساب\"\n• \"تذكر أن سعر X هو Y\"\n• \"كم سعر X؟\""
         }
