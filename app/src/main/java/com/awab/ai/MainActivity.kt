@@ -848,8 +848,10 @@ class MainActivity : AppCompatActivity() {
 
         android.os.Handler(mainLooper).postDelayed({
             if (bodySteps.isNotEmpty()) {
+                // استبدل كلمة "عنصر" بالنص الحالي في كل الخطوات
+                val resolvedSteps = bodySteps.map { step -> replaceItemInStep(step, item) }
                 // نفّذ الخطوات على هذا العنصر ثم انتقل للتالي
-                executeStepList(bodySteps, delayMs) {
+                executeStepList(resolvedSteps, delayMs) {
                     android.os.Handler(mainLooper).postDelayed({
                         executeItemList(items, isUrl, bodySteps, current + 1, delayMs, onDone)
                     }, delayMs)
