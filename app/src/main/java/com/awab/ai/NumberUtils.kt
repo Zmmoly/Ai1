@@ -43,3 +43,29 @@ object NumberUtils {
 /** امتداد مريح — يُطبَّق على أي String مباشرة */
 fun String.normalizeNumbers(): String = NumberUtils.normalize(this)
 
+/**
+ * تطبيع النص العربي:
+ * - توحيد الهمزات: أ إ آ → ا
+ * - توحيد التاء المربوطة: ة → ه
+ * - إزالة التشكيل
+ * - توحيد الألف المقصورة: ى → ي
+ */
+fun String.normalizeArabic(): String {
+    return this
+        // توحيد الهمزات → ا
+        .replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+        // توحيد التاء المربوطة → ه
+        .replace('ة', 'ه')
+        // توحيد الألف المقصورة → ي
+        .replace('ى', 'ي')
+        // إزالة التشكيل
+        .replace('ً', "").replace('ٌ', "")
+        .replace('ٍ', "").replace('َ', "")
+        .replace('ُ', "").replace('ِ', "")
+        .replace('ّ', "").replace('ْ', "")
+        .trim()
+}
+
+/** تطبيع شامل: أرقام + عربي */
+fun String.normalizeAll(): String = this.normalizeNumbers().normalizeArabic()
+
