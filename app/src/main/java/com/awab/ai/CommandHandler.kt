@@ -19,7 +19,7 @@ class CommandHandler(private val context: Context) {
      * الأوامر يمكن أن تكون مفصولة بـ: و، ثم، ،
      */
     fun handleMultipleCommands(rawMessage: String): List<String> {
-        val message = rawMessage.normalizeNumbers()
+        val message = rawMessage.normalizeAll()
         // فصل الأوامر بناءً على الفواصل
         val separators = listOf(" و ", " ثم ", "،", ",", "\n")
         var commands = listOf(message)
@@ -52,8 +52,8 @@ class CommandHandler(private val context: Context) {
     }
 
     fun handleCommand(rawMessage: String): String {
-        val message = rawMessage.normalizeNumbers()
-        val lowerMessage = message.lowercase()
+        val message = rawMessage.normalizeAll()
+        val lowerMessage = message.normalizeAll().lowercase()
 
         return when {
             // عرض كل التطبيقات المثبتة
@@ -237,6 +237,12 @@ class CommandHandler(private val context: Context) {
                 readScreen()
             }
 
+
+            // ── البحث عن نص في الشاشة ──
+            lowerMessage.startsWith("ابحث عن ") || lowerMessage.startsWith("هل يوجد ") -> {
+                val query = message.removePrefix("ابحث عن ").removePrefix("هل يوجد ").trim()
+                searchInScreen(query)
+            }
             // ── كتابة نص في الحقل النشط ──
             lowerMessage.startsWith("اكتب ") || lowerMessage.startsWith("كتب ") ||
             lowerMessage.startsWith("write ") || lowerMessage.startsWith("type ") -> {
@@ -537,7 +543,7 @@ class CommandHandler(private val context: Context) {
         }
 
         // إذا كان رقم - اتصال مباشر
-        val contactNorm = contactName.normalizeNumbers()
+        val contactNorm = contactName.normalizeAll()
         if (contactNorm.matches(Regex("^[0-9+]+$"))) {
             try {
                 val intent = Intent(Intent.ACTION_CALL).apply {  // ← تم التغيير من ACTION_DIAL إلى ACTION_CALL
@@ -867,6 +873,25 @@ class CommandHandler(private val context: Context) {
         }
     }
 
+    private fun searchInScreen(query: String): String {
+        if (query.isBlank()) return "ماذا تريد أن أبحث عنه؟"
+        val service = MyAccessibilityService.getInstance()
+            ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول من الإعدادات"
+
+        val screenText = service.getScreenText()
+        if (screenText.isBlank()) return "⚠️ لا يوجد نص في الشاشة الحالية"
+
+        val lines = screenText.lines()
+        val matches = lines.filter { it.contains(query, ignoreCase = true) }
+
+        return if (matches.isNotEmpty()) {
+            val result = matches.joinToString("\n• ", prefix = "• ")
+            "✅ وجدت \"$query\" في الشاشة (${matches.size} نتيجة):\n\n$result"
+        } else {
+            "❌ لم أجد \"$query\" في الشاشة الحالية"
+        }
+    }
+
 
     // ───────────────────────────────────────────
     // دوال البحث المتقدم
@@ -1028,6 +1053,7 @@ class CommandHandler(private val context: Context) {
 📖 *قراءة الشاشة*
 • اقرا الشاشة
 • عناصر الشاشة
+• ابحث عن [نص]
 
 📜 *التمرير*
 • مرر لأعلى / لأسفل
