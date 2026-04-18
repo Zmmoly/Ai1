@@ -59,10 +59,10 @@ fun String.normalizeArabic(): String {
         // توحيد الألف المقصورة → ي
         .replace('ى', 'ي')
         // إزالة التشكيل
-        .replace('ً', "").replace('ٌ', "")
-        .replace('ٍ', "").replace('َ', "")
-        .replace('ُ', "").replace('ِ', "")
-        .replace('ّ', "").replace('ْ', "")
+        .replace("ً", "").replace("ٌ", "")
+        .replace("ٍ", "").replace("َ", "")
+        .replace("ُ", "").replace("ِ", "")
+        .replace("ّ", "").replace("ْ", "")
         .trim()
 }
 
