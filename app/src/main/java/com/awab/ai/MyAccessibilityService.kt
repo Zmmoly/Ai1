@@ -639,6 +639,12 @@ class MyAccessibilityService : AccessibilityService() {
             texts.add(text)
         }
 
+        // بعض التطبيقات (كتيليجرام) تضع أسماء المجموعات في contentDescription بدلاً من text
+        val desc = node.contentDescription?.toString()
+        if (!desc.isNullOrBlank() && desc != text) {
+            texts.add(desc)
+        }
+
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectTexts(child, texts)
