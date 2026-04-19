@@ -241,11 +241,11 @@ object StepEngine {
         if (lower in listOf("خطأ","خطا","أبداً","false","لا","no"))   return false
 
         // AND: "... و ..."
-        if (lower.contains(" و ") && !lower.startsWith("الشاشة")) {
+        if (lower.contains(" و ") && !lower.startsWith("الشاشه")) {
             return lower.split(" و ").all { evaluateCondition(it.trim()) }
         }
         // OR: "... أو ..."
-        if (lower.contains(" أو ")) {
+        if (lower.contains(" او ")) {
             return lower.split(" أو ").any { evaluateCondition(it.trim()) }
         }
 
