@@ -326,11 +326,11 @@ object ShoppingManager {
         if (lower.contains("اليوم")) {
             val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
-        if (lower.contains("امس") || lower.contains("أمس")) {
+        if (lower.contains("امس") || lower.contains("امس")) {
             cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
             val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
-        if (lower.contains("أول امس") || lower.contains("اول امس")) {
+        if (lower.contains("اول امس") || lower.contains("اول امس")) {
             cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
             val s = startOfDay(cal); return Pair(s, endOfDay(s))
         }
