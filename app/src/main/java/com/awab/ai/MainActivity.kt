@@ -216,13 +216,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (lower.contains("استورد") || lower.contains("استعادة البيانات") ||
+        if (lower.contains("استورد") || lower.contains("استعاده البيانات") ||
             lower.contains("رجّع بياناتي") || lower.contains("رجع بياناتي")) {
             addBotMessage(BackupManager.import(this))
             return
         }
 
-        if (lower.contains("مسار النسخة") || lower.contains("اين النسخة") || lower.contains("أين النسخة")) {
+        if (lower.contains("مسار النسخه") || lower.contains("اين النسخه") || lower.contains("اين النسخه")) {
             addBotMessage("📁 مسار النسخة الاحتياطية:\n${BackupManager.getBackupPath(this)}")
             return
         }
@@ -239,7 +239,7 @@ class MainActivity : AppCompatActivity() {
 
         // عرض التذكيرات المعلقة
         if (lower.contains("اعرض التذكيرات") || lower.contains("كل التذكيرات") ||
-            lower.contains("ماهي التذكيرات") || lower.contains("التذكيرات المعلقة")) {
+            lower.contains("ماهي التذكيرات") || lower.contains("التذكيرات المعلقه")) {
             val pending = ReminderManager.getPendingReminders(this)
             if (pending.isEmpty()) {
                 addBotMessage("📭 لا توجد تذكيرات معلقة حالياً.")
@@ -302,8 +302,8 @@ class MainActivity : AppCompatActivity() {
         // ===== نظام التسوق =====
 
         // إنهاء الجلسة
-        if (lower.contains("انهي الجلسة") || lower.contains("انهي الجلسه") ||
-            lower.contains("أنهي الجلسة") || lower.contains("خلص الجلسة")) {
+        if (lower.contains("انهي الجلسه") || lower.contains("انهي الجلسه") ||
+            lower.contains("انهي الجلسه") || lower.contains("خلص الجلسه")) {
             val session = ShoppingManager.endActiveSession(this)
             if (session != null) {
                 val total = ShoppingManager.getSessionTotal(this, session.id)
@@ -391,14 +391,14 @@ class MainActivity : AppCompatActivity() {
                 val items = ShoppingManager.getItemsByDate(this, start, end)
                 val dateLabel = when {
                     lower.contains("اليوم")  -> "اليوم"
-                    lower.contains("امس") || lower.contains("أمس") -> "أمس"
-                    lower.contains("أول امس") || lower.contains("اول امس") -> "أول أمس"
-                    lower.contains("الجمعة")   -> "يوم الجمعة"
+                    lower.contains("امس") || lower.contains("امس") -> "أمس"
+                    lower.contains("اول امس") || lower.contains("اول امس") -> "أول أمس"
+                    lower.contains("الجمعه")   -> "يوم الجمعة"
                     lower.contains("الخميس")   -> "يوم الخميس"
-                    lower.contains("الأربعاء") || lower.contains("الاربعاء") -> "يوم الأربعاء"
+                    lower.contains("الاربعاء") || lower.contains("الاربعاء") -> "يوم الأربعاء"
                     lower.contains("الثلاثاء") -> "يوم الثلاثاء"
                     lower.contains("الاثنين")  -> "يوم الاثنين"
-                    lower.contains("الأحد") || lower.contains("الاحد") -> "يوم الأحد"
+                    lower.contains("الاحد") || lower.contains("الاحد") -> "يوم الأحد"
                     lower.contains("السبت")    -> "يوم السبت"
                     else -> Regex("\\d{1,2}/\\d{1,2}").find(userMessage)?.value ?: "ذلك اليوم"
                 }
@@ -408,22 +408,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         // عرض القائمة الحالية
-        if (lower.contains("قايمة") || lower.contains("قائمة") || lower.contains("مشترياتي") ||
-            lower.contains("اعرض السوق") || lower.contains("الفاتورة") || lower.contains("الحساب")) {
+        if (lower.contains("قايمه") || lower.contains("قائمه") || lower.contains("مشترياتي") ||
+            lower.contains("اعرض السوق") || lower.contains("الفاتوره") || lower.contains("الحساب")) {
             addBotMessage(ShoppingManager.formatCurrentSession(this))
             return
         }
 
         // مسح قائمة التسوق
-        if (lower.contains("امسح القايمة") || lower.contains("امسح القائمة") ||
-            lower.contains("ابدأ من جديد") || lower.contains("مسح المشتريات")) {
+        if (lower.contains("امسح القايمه") || lower.contains("امسح القائمه") ||
+            lower.contains("ابدا من جديد") || lower.contains("مسح المشتريات")) {
             ShoppingManager.clearItems(this)
             addBotMessage("🗑️ تم مسح قائمة التسوق. جاهز لقائمة جديدة!")
             return
         }
 
         // الباقي / الإجمالي
-        if (lower.contains("كم الباقي") || lower.contains("كم تبقى") || lower.contains("كم صرفت")) {
+        if (lower.contains("كم الباقي") || lower.contains("كم تبقي") || lower.contains("كم صرفت")) {
             val session   = ShoppingManager.getActiveSession(this)
             val sessionId = ShoppingManager.getActiveSessionId(this)
             val total     = ShoppingManager.getSessionTotal(this, sessionId)
@@ -484,7 +484,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // حذف معلومة: "امسح/احذف X"
-        if (lower.startsWith("امسح ") || lower.startsWith("احذف ") || lower.startsWith("امسح معلومة")) {
+        if (lower.startsWith("امسح ") || lower.startsWith("احذف ") || lower.startsWith("امسح معلومه")) {
             val key = userMessage.substringAfter(" ").trim()
             if (memoryManager.delete(key)) {
                 addBotMessage("🗑️ تم حذف \"$key\" من الذاكرة.")
@@ -495,7 +495,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // عرض كل الذاكرة: "ماذا تتذكر" / "اعرض الذاكرة"
-        if (lower.contains("ماذا تتذكر") || lower.contains("اعرض الذاكرة") || lower.contains("كل المحفوظات")) {
+        if (lower.contains("ماذا تتذكر") || lower.contains("اعرض الذاكره") || lower.contains("كل المحفوظات")) {
             val all = memoryManager.getAll()
             if (all.length() == 0) {
                 addBotMessage("🧠 الذاكرة فارغة حالياً.\n\nيمكنك قول مثلاً:\n• \"تذكر أن سعر الهاتف هو 500\"\n• \"اشتريت تلفاز بسعر 1200\"")
@@ -512,7 +512,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // مسح كل الذاكرة
-        if (lower.contains("امسح كل الذاكرة") || lower.contains("احذف كل المحفوظات")) {
+        if (lower.contains("امسح كل الذاكره") || lower.contains("احذف كل المحفوظات")) {
             memoryManager.clearAll()
             addBotMessage("🗑️ تم مسح كل الذاكرة.")
             return
@@ -534,11 +534,11 @@ class MainActivity : AppCompatActivity() {
 
         val response = when {
             lower.contains("مرحبا") || lower.contains("السلام") || lower.contains("هلا") ||
-            lower.contains("كيف") || lower.contains("ساعد") || lower.contains("أوامر") ||
-            lower.contains("اوامر") || lower == "help" || lower == "مساعدة" ->
+            lower.contains("كيف") || lower.contains("ساعد") || lower.contains("اوامر") ||
+            lower.contains("اوامر") || lower == "help" || lower == "مساعده" ->
                 commandHandler.handleCommand("اوامر")
 
-            lower.contains("إعدادات") || lower.contains("settings") -> {
+            lower.contains("اعدادات") || lower.contains("settings") -> {
                 openSettings()
                 "سأفتح لك صفحة الإعدادات..."
             }
