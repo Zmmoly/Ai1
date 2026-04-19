@@ -258,11 +258,11 @@ object ReminderManager {
         // "اليوم" أو "الساعة X" (بدون يوم = اليوم)
         if (lower.contains("اليوم") ||
             (!lower.contains("غداً") && !lower.contains("غدا") &&
-             !lower.contains("بكرة") && !lower.contains("بكره") &&
+             !lower.contains("بكره") && !lower.contains("بكره") &&
              !lower.contains("يوم") && !lower.contains("في ") &&
-             !lower.contains("الأحد") && !lower.contains("الاثنين") &&
-             !lower.contains("الثلاثاء") && !lower.contains("الأربعاء") &&
-             !lower.contains("الخميس") && !lower.contains("الجمعة") &&
+             !lower.contains("الاحد") && !lower.contains("الاثنين") &&
+             !lower.contains("الثلاثاء") && !lower.contains("الاربعاء") &&
+             !lower.contains("الخميس") && !lower.contains("الجمعه") &&
              !lower.contains("السبت"))) {
             cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
             cal.set(java.util.Calendar.MINUTE, minute)
@@ -277,7 +277,7 @@ object ReminderManager {
 
         // "غداً" أو "بكرة"
         if (lower.contains("غداً") || lower.contains("غدا") ||
-            lower.contains("بكرة") || lower.contains("بكره")) {
+            lower.contains("بكره") || lower.contains("بكره")) {
             cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
             cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
             cal.set(java.util.Calendar.MINUTE, minute)
@@ -347,12 +347,12 @@ object ReminderManager {
 
     private fun parseDayOfWeek(lower: String): Int? {
         return when {
-            lower.contains("الأحد") || lower.contains("احد") -> java.util.Calendar.SUNDAY
+            lower.contains("الاحد") || lower.contains("احد") -> java.util.Calendar.SUNDAY
             lower.contains("الاثنين") || lower.contains("اثنين") -> java.util.Calendar.MONDAY
             lower.contains("الثلاثاء") || lower.contains("ثلاثاء") -> java.util.Calendar.TUESDAY
-            lower.contains("الأربعاء") || lower.contains("اربعاء") -> java.util.Calendar.WEDNESDAY
+            lower.contains("الاربعاء") || lower.contains("اربعاء") -> java.util.Calendar.WEDNESDAY
             lower.contains("الخميس") || lower.contains("خميس") -> java.util.Calendar.THURSDAY
-            lower.contains("الجمعة") || lower.contains("جمعة") || lower.contains("جمعه") -> java.util.Calendar.FRIDAY
+            lower.contains("الجمعه") || lower.contains("جمعه") || lower.contains("جمعه") -> java.util.Calendar.FRIDAY
             lower.contains("السبت") || lower.contains("سبت") -> java.util.Calendar.SATURDAY
             else -> null
         }
@@ -364,13 +364,13 @@ object ReminderManager {
             lower.contains("يناير") || lower.contains("جانفي") -> 0
             lower.contains("فبراير") || lower.contains("فيفري") -> 1
             lower.contains("مارس") -> 2
-            lower.contains("أبريل") || lower.contains("ابريل") || lower.contains("نيسان") -> 3
+            lower.contains("ابريل") || lower.contains("ابريل") || lower.contains("نيسان") -> 3
             lower.contains("مايو") || lower.contains("ماي") -> 4
             lower.contains("يونيو") || lower.contains("يونو") || lower.contains("جوان") -> 5
-            lower.contains("يوليو") || lower.contains("يوليه") || lower.contains("جويلية") -> 6
-            lower.contains("أغسطس") || lower.contains("اغسطس") || lower.contains("أوت") -> 7
+            lower.contains("يوليو") || lower.contains("يوليه") || lower.contains("جويليه") -> 6
+            lower.contains("اغسطس") || lower.contains("اغسطس") || lower.contains("اوت") -> 7
             lower.contains("سبتمبر") || lower.contains("سبتمبار") -> 8
-            lower.contains("أكتوبر") || lower.contains("اكتوبر") -> 9
+            lower.contains("اكتوبر") || lower.contains("اكتوبر") -> 9
             lower.contains("نوفمبر") || lower.contains("نوفمبار") -> 10
             lower.contains("ديسمبر") || lower.contains("ديسمبار") || lower.contains("دجنبر") -> 11
             else -> null
