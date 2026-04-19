@@ -59,7 +59,7 @@ class CommandHandler(private val context: Context) {
             // عرض كل التطبيقات المثبتة
             lowerMessage.contains("اعرض التطبيقات") || 
             lowerMessage.contains("كل التطبيقات") || 
-            lowerMessage.contains("قائمة التطبيقات") ||
+            lowerMessage.contains("قائمه التطبيقات") ||
             lowerMessage == "list apps" -> {
                 listInstalledApps()
             }
@@ -104,7 +104,7 @@ class CommandHandler(private val context: Context) {
             }
 
             // إغلاق تطبيق (يستخدم Accessibility)
-            lowerMessage.startsWith("أقفل") || lowerMessage.startsWith("اقفل") -> {
+            lowerMessage.startsWith("اقفل") || lowerMessage.startsWith("اقفل") -> {
                 val appName = message.substringAfter("أقفل").substringAfter("اقفل").trim()
                 closeApp(appName)
             }
@@ -115,17 +115,17 @@ class CommandHandler(private val context: Context) {
             }
 
             // الشاشة الرئيسية
-            lowerMessage.contains("الشاشة الرئيسية") || lowerMessage.contains("هوم") || lowerMessage == "home" -> {
+            lowerMessage.contains("الشاشه الرئيسيه") || lowerMessage.contains("هوم") || lowerMessage == "home" -> {
                 performHome()
             }
 
             // Recent Apps
-            lowerMessage.contains("التطبيقات الأخيرة") || lowerMessage == "recent" || lowerMessage == "recents" -> {
+            lowerMessage.contains("التطبيقات الاخيره") || lowerMessage == "recent" || lowerMessage == "recents" -> {
                 performRecents()
             }
 
             // الإشعارات
-            lowerMessage.contains("افتح الإشعارات") || lowerMessage.contains("الاشعارات") -> {
+            lowerMessage.contains("افتح الاشعارات") || lowerMessage.contains("الاشعارات") -> {
                 performNotifications()
             }
 
@@ -149,7 +149,7 @@ class CommandHandler(private val context: Context) {
 
             // بيانات الجوال
             // أوامر التمرير
-            lowerMessage.contains("مرر لأعلى") || lowerMessage.contains("اسحب لأعلى") -> {
+            lowerMessage.contains("مرر لاعلي") || lowerMessage.contains("اسحب لاعلي") -> {
                 val service = MyAccessibilityService.getInstance()
                 if (service != null) {
                     val dm = context.resources.displayMetrics
@@ -158,7 +158,7 @@ class CommandHandler(private val context: Context) {
                 } else "⚠️ يجب تفعيل خدمة إمكانية الوصول"
             }
 
-            lowerMessage.contains("مرر لأسفل") || lowerMessage.contains("اسحب لأسفل") -> {
+            lowerMessage.contains("مرر لاسفل") || lowerMessage.contains("اسحب لاسفل") -> {
                 val service = MyAccessibilityService.getInstance()
                 if (service != null) {
                     val dm = context.resources.displayMetrics
@@ -199,22 +199,22 @@ class CommandHandler(private val context: Context) {
             }
 
             // نقطة اتصال
-            lowerMessage.contains("شغل نقطة اتصال") || lowerMessage.contains("هوت سبوت") || lowerMessage.contains("hotspot") -> {
+            lowerMessage.contains("شغل نقطه اتصال") || lowerMessage.contains("هوت سبوت") || lowerMessage.contains("hotspot") -> {
                 openHotspotSettings()
             }
 
             // قلب الشاشة (تدوير)
-            lowerMessage.contains("قلب الشاشة") || lowerMessage.contains("دور الشاشة") -> {
+            lowerMessage.contains("قلب الشاشه") || lowerMessage.contains("دور الشاشه") -> {
                 openRotationSettings()
             }
 
             // سكرين شوت (يستخدم Accessibility)
-            lowerMessage.contains("سكرين شوت") || lowerMessage.contains("لقطة شاشة") || lowerMessage.contains("screenshot") -> {
+            lowerMessage.contains("سكرين شوت") || lowerMessage.contains("لقطه شاشه") || lowerMessage.contains("screenshot") -> {
                 takeScreenshot()
             }
 
             // الصوت
-            lowerMessage.contains("على الصوت") || lowerMessage.contains("ارفع الصوت") || lowerMessage.contains("زود الصوت") -> {
+            lowerMessage.contains("علي الصوت") || lowerMessage.contains("ارفع الصوت") || lowerMessage.contains("زود الصوت") -> {
                 increaseVolume()
             }
 
@@ -227,13 +227,13 @@ class CommandHandler(private val context: Context) {
             }
 
             // قائمة الأوامر
-            lowerMessage.contains("أوامر") || lowerMessage.contains("اوامر") ||
-            lowerMessage == "help" || lowerMessage == "مساعدة" -> {
+            lowerMessage.contains("اوامر") || lowerMessage.contains("اوامر") ||
+            lowerMessage == "help" || lowerMessage == "مساعده" -> {
                 showCommandsList()
             }
 
             // قراءة الشاشة
-            lowerMessage.contains("اقرا الشاشة") || lowerMessage.contains("ماذا في الشاشة") || lowerMessage == "read screen" -> {
+            lowerMessage.contains("اقرا الشاشه") || lowerMessage.contains("ماذا في الشاشه") || lowerMessage == "read screen" -> {
                 readScreen()
             }
 
@@ -253,7 +253,7 @@ class CommandHandler(private val context: Context) {
             }
 
             // الضغط على عنصر بالنص
-            lowerMessage.startsWith("اضغط على") || lowerMessage.startsWith("انقر على") -> {
+            lowerMessage.startsWith("اضغط علي") || lowerMessage.startsWith("انقر علي") -> {
                 val text = message.substringAfter("اضغط على").substringAfter("انقر على").trim()
                 clickOnText(text)
             }
@@ -264,27 +264,27 @@ class CommandHandler(private val context: Context) {
             }
 
             // إيقاف المراقبة: "أوقف مراقبة يوتيوب"
-            lowerMessage.startsWith("أوقف مراقبة ") || lowerMessage.startsWith("اوقف مراقبة ") ||
-            lowerMessage.startsWith("أوقف المراقبة") || lowerMessage.startsWith("اوقف المراقبة") -> {
+            lowerMessage.startsWith("اوقف مراقبه ") || lowerMessage.startsWith("اوقف مراقبه ") ||
+            lowerMessage.startsWith("اوقف المراقبه") || lowerMessage.startsWith("اوقف المراقبه") -> {
                 stopWatch(message)
             }
 
             // عرض المراقبات النشطة
-            lowerMessage.contains("المراقبات") || lowerMessage.contains("مراقبات نشطة") -> {
+            lowerMessage.contains("المراقبات") || lowerMessage.contains("مراقبات نشطه") -> {
                 listWatches()
             }
 
 
             // ── البحث بالنوع: "اضغط على أول زر" / "اضغط على أول حقل نص" ──
-            lowerMessage.startsWith("اضغط على أول زر") || lowerMessage.startsWith("انقر على أول زر") -> {
+            lowerMessage.startsWith("اضغط علي اول زر") || lowerMessage.startsWith("انقر علي اول زر") -> {
                 clickFirstByClass("Button")
             }
 
-            lowerMessage.startsWith("اضغط على أول حقل") || lowerMessage.startsWith("انقر على أول حقل") -> {
+            lowerMessage.startsWith("اضغط علي اول حقل") || lowerMessage.startsWith("انقر علي اول حقل") -> {
                 clickFirstByClass("EditText")
             }
 
-            lowerMessage.startsWith("اضغط على أول صورة") || lowerMessage.startsWith("انقر على أول صورة") -> {
+            lowerMessage.startsWith("اضغط علي اول صوره") || lowerMessage.startsWith("انقر علي اول صوره") -> {
                 clickFirstByClass("ImageView")
             }
 
@@ -309,7 +309,7 @@ class CommandHandler(private val context: Context) {
             }
 
             // ── اقرأ الشاشة بالتفصيل: "عناصر الشاشة" ──
-            lowerMessage.contains("عناصر الشاشة") || lowerMessage.contains("عناصر قابلة للنقر") -> {
+            lowerMessage.contains("عناصر الشاشه") || lowerMessage.contains("عناصر قابله للنقر") -> {
                 listClickableElements()
             }
 
