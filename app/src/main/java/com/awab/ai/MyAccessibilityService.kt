@@ -188,12 +188,13 @@ class MyAccessibilityService : AccessibilityService() {
             watchTasks.forEach { allPackages.add(it.packageName) }
         }
 
+        // نبقي الاستماع فعالاً دائماً حتى تكون rootInActiveWindow و windows
+        // محدَّثتين في أي وقت تُستدعى فيه getScreenText()
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                          AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if (allPackages.isEmpty() && !hasActiveTasks.get()) {
-            info.eventTypes = 0
-            info.packageNames = arrayOf("com.awab.ai")
+            info.packageNames = null  // null = استمع لكل التطبيقات
         } else {
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             info.packageNames = allPackages.toTypedArray()
         }
         serviceInfo = info
@@ -621,9 +622,23 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * الحصول على كل النصوص في الشاشة
-     * يستمع مؤقتاً لآخر تطبيق فُتح لضمان قراءة نافذته
+     * يفعّل الاستماع مؤقتاً قبل القراءة لضمان الحصول على snapshot حديث
      */
     fun getScreenText(): String {
+        // ── فعّل الاستماع مؤقتاً حتى يتحدث rootInActiveWindow و windows ──
+        val info = serviceInfo
+        val savedPackages = info?.packageNames?.copyOf()
+        val savedEventTypes = info?.eventTypes ?: 0
+        if (info != null) {
+            info.packageNames = null   // استمع لكل التطبيقات
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            serviceInfo = info
+        }
+
+        // انتظر لحظة قصيرة حتى يتحدث النظام الـ window tree
+        Thread.sleep(150)
+
         val texts = mutableListOf<String>()
 
         // الطريقة الأولى: windows API — تتجاوز packageNames كلياً (API 21+)
@@ -637,27 +652,20 @@ class MyAccessibilityService : AccessibilityService() {
             } catch (_: Exception) {}
         }
 
-        // الطريقة الثانية: fallback — rootInActiveWindow مع إلغاء القيد
+        // الطريقة الثانية: fallback — rootInActiveWindow
         if (texts.isEmpty()) {
-            val info = serviceInfo
-            val savedPackages = info?.packageNames?.copyOf()
-            val savedEventTypes = info?.eventTypes ?: 0
-            if (info != null) {
-                info.packageNames = null
-                info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                                  AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                serviceInfo = info
-            }
             val rootNode = rootInActiveWindow
             if (rootNode != null) {
                 collectTexts(rootNode, texts)
                 rootNode.recycle()
             }
-            if (info != null) {
-                info.packageNames = savedPackages
-                info.eventTypes = savedEventTypes
-                serviceInfo = info
-            }
+        }
+
+        // ── أعد تعطيل الاستماع للحفاظ على البطارية ──
+        if (info != null) {
+            info.packageNames = savedPackages
+            info.eventTypes = savedEventTypes
+            serviceInfo = info
         }
 
         return texts.joinToString("\n")
