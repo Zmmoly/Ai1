@@ -624,19 +624,35 @@ class MyAccessibilityService : AccessibilityService() {
      * يستمع مؤقتاً لآخر تطبيق فُتح لضمان قراءة نافذته
      */
     fun getScreenText(): String {
-        // افتح الاستماع لجميع التطبيقات مؤقتاً حتى نستطيع قراءة أي نافذة
         val info = serviceInfo
+
+        // ① احفظ القيود الحالية حتى نُعيدها بعد القراءة
+        val savedPackages = info?.packageNames?.copyOf()
+        val savedEventTypes = info?.eventTypes ?: 0
+
+        // ② ألغِ القيد مؤقتاً — استمع لكل التطبيقات
         if (info != null) {
+            info.packageNames = null
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                               AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-            info.packageNames = null  // null = استمع لكل التطبيقات
             serviceInfo = info
         }
 
-        val rootNode = rootInActiveWindow ?: return ""
+        // ③ اقرأ الشاشة
+        val rootNode = rootInActiveWindow
         val texts = mutableListOf<String>()
-        collectTexts(rootNode, texts)
-        rootNode.recycle()
+        if (rootNode != null) {
+            collectTexts(rootNode, texts)
+            rootNode.recycle()
+        }
+
+        // ④ أعِد القيود الأصلية فوراً
+        if (info != null) {
+            info.packageNames = savedPackages
+            info.eventTypes = savedEventTypes
+            serviceInfo = info
+        }
+
         return texts.joinToString("\n")
     }
 
