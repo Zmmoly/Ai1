@@ -16,7 +16,7 @@ data class CustomCommand(
     val name: String,              // الاسم الذي يكتبه المستخدم لتشغيل الأمر
     val description: String,       // وصف اختياري
     val steps: List<String>,       // الأوامر بالتسلسل
-    val delaySeconds: Int = 2      // التأخير بين كل خطوة
+    val delaySeconds: Int = 0      // التأخير بين كل خطوة
 )
 
 object CustomCommandsManager {
@@ -63,7 +63,7 @@ object CustomCommandsManager {
                         name = obj.getString("name"),
                         description = obj.optString("description", ""),
                         steps = steps,
-                        delaySeconds = obj.optInt("delaySeconds", 2)
+                        delaySeconds = obj.optInt("delaySeconds", 0)
                     )
                 )
             }
