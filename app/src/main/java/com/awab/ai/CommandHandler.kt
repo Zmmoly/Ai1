@@ -237,6 +237,12 @@ class CommandHandler(private val context: Context) {
                 readScreen()
             }
 
+            lowerMessage == "debug شاشة" -> {
+                val service = MyAccessibilityService.getInstance()
+                    ?: return "⚠️ خدمة إمكانية الوصول غير مفعّلة"
+                service.debugScreenTree()
+            }
+
 
             // ── البحث عن نص في الشاشة ──
             lowerMessage.startsWith("ابحث عن ") || lowerMessage.startsWith("هل يوجد ") -> {
