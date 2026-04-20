@@ -283,9 +283,9 @@ class CustomCommandsActivity : AppCompatActivity() {
 
         // حقل التأخير
         container.addView(label("التأخير بين الخطوات (بالثواني):"))
-        val delayField = editField("2").apply {
+        val delayField = editField("0").apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            setText((existing?.delaySeconds ?: 2).toString())
+            setText((existing?.delaySeconds ?: 0).toString())
         }
         container.addView(delayField)
 
@@ -404,7 +404,7 @@ class CustomCommandsActivity : AppCompatActivity() {
                     name = name,
                     description = desc,
                     steps = steps,
-                    delaySeconds = delay.coerceIn(1, 30)
+                    delaySeconds = delay.coerceIn(0, 30)
                 )
 
                 if (isEdit) {
