@@ -635,6 +635,8 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
         }
+        // انتظر حتى يُطبّق النظام التغييرات ويتحدث rootInActiveWindow
+        Thread.sleep(300)
         val rootNode = rootInActiveWindow ?: return ""
         val texts = mutableListOf<String>()
         collectTexts(rootNode, texts)
