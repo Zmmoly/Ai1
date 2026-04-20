@@ -624,33 +624,40 @@ class MyAccessibilityService : AccessibilityService() {
      * يستمع مؤقتاً لآخر تطبيق فُتح لضمان قراءة نافذته
      */
     fun getScreenText(): String {
-        val info = serviceInfo
-
-        // ① احفظ القيود الحالية حتى نُعيدها بعد القراءة
-        val savedPackages = info?.packageNames?.copyOf()
-        val savedEventTypes = info?.eventTypes ?: 0
-
-        // ② ألغِ القيد مؤقتاً — استمع لكل التطبيقات
-        if (info != null) {
-            info.packageNames = null
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-            serviceInfo = info
-        }
-
-        // ③ اقرأ الشاشة
-        val rootNode = rootInActiveWindow
         val texts = mutableListOf<String>()
-        if (rootNode != null) {
-            collectTexts(rootNode, texts)
-            rootNode.recycle()
+
+        // الطريقة الأولى: windows API — تتجاوز packageNames كلياً (API 21+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                windows?.forEach { win ->
+                    val root = win.root ?: return@forEach
+                    collectTexts(root, texts)
+                    root.recycle()
+                }
+            } catch (_: Exception) {}
         }
 
-        // ④ أعِد القيود الأصلية فوراً
-        if (info != null) {
-            info.packageNames = savedPackages
-            info.eventTypes = savedEventTypes
-            serviceInfo = info
+        // الطريقة الثانية: fallback — rootInActiveWindow مع إلغاء القيد
+        if (texts.isEmpty()) {
+            val info = serviceInfo
+            val savedPackages = info?.packageNames?.copyOf()
+            val savedEventTypes = info?.eventTypes ?: 0
+            if (info != null) {
+                info.packageNames = null
+                info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                                  AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                serviceInfo = info
+            }
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                collectTexts(rootNode, texts)
+                rootNode.recycle()
+            }
+            if (info != null) {
+                info.packageNames = savedPackages
+                info.eventTypes = savedEventTypes
+                serviceInfo = info
+            }
         }
 
         return texts.joinToString("\n")
