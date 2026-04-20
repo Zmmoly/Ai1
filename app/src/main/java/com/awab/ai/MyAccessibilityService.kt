@@ -79,9 +79,8 @@ class MyAccessibilityService : AccessibilityService() {
             hasActiveTasks.set(true)
         }
 
-        // استخدم packageName المحدد أو التطبيق الحالي تلقائياً
-        val pkg = packageName ?: rootInActiveWindow?.packageName?.toString() ?: ""
-        setListenPackage(pkg)
+        // ✅ updateListenPackages سيضبط packageNames = null تلقائياً عند وجود WaitTasks
+        updateListenPackages()
 
         // ضبط timeout إذا كانت المهلة محددة
         if (timeoutMs > 0) {
@@ -175,27 +174,38 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * يحدّث قائمة الحزم المستمَع لها بناءً على المهام النشطة
-     * يجمع حزم WaitTasks و WatchTasks معاً
+     *
+     * ⚠️ القاعدة الذهبية:
+     *   packageNames = null  →  استمع لكل التطبيقات
+     *   هذا ضروري لكي يعمل rootInActiveWindow مع أي تطبيق مفتوح
+     *
+     * نُقيّد الاستماع فقط عندما توجد WatchTasks بدون WaitTasks (تحسين للأداء)
      */
     private fun updateListenPackages() {
         val info = serviceInfo ?: return
-        val allPackages = mutableSetOf<String>()
 
-        synchronized(waitTasks) {
-            // نأخذ packageNames من serviceInfo الحالي (WaitTasks تضبطه)
-        }
+        // دائماً نستمع لأحداث النوافذ — ضروري لتتبع lastOpenedPackage
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                          AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+
+        val watchPackages = mutableSetOf<String>()
         synchronized(watchTasks) {
-            watchTasks.forEach { allPackages.add(it.packageName) }
+            watchTasks.forEach { watchPackages.add(it.packageName) }
         }
 
-        if (allPackages.isEmpty() && !hasActiveTasks.get()) {
-            info.eventTypes = 0
-            info.packageNames = arrayOf("com.awab.ai")
-        } else {
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-            info.packageNames = allPackages.toTypedArray()
+        val hasWaits = hasActiveTasks.get()
+
+        info.packageNames = when {
+            // يوجد WaitTasks → لا نعرف في أي تطبيق سيظهر النص → استمع للكل
+            hasWaits -> null
+
+            // يوجد WatchTasks فقط → يمكن تقييد الاستماع لتلك الحزم
+            watchPackages.isNotEmpty() -> watchPackages.toTypedArray()
+
+            // لا توجد مهام → null (استمع للكل) حتى يعمل getScreenText في أي وقت
+            else -> null
         }
+
         serviceInfo = info
     }
 
@@ -302,13 +312,12 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * يضبط التطبيق الذي نستمع له
-     * null = لا نستمع لأحد (وضع صامت)
+     * يُحدّث إعدادات الاستماع — packageName لم يعد مستخدماً (محتفظ به للتوافق)
+     * الآن يعتمد على updateListenPackages مباشرة
      */
     private fun setListenPackage(packageName: String?) {
-        // نستدعي updateListenPackages لضمان دمج WaitTasks و WatchTasks
         updateListenPackages()
-        Log.d(TAG, if (packageName != null) "👂 أستمع لـ $packageName" else "🔇 وضع صامت")
+        Log.d(TAG, "🔄 updateListenPackages() → packageNames=${serviceInfo?.packageNames?.contentToString() ?: "null (all)"}")
     }
 
     override fun onInterrupt() {
@@ -320,7 +329,8 @@ class MyAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         context = applicationContext
-        setListenPackage(null)  // ابدأ في وضع صامت
+        // ✅ ابدأ بـ packageNames = null (استمع لكل التطبيقات)
+        updateListenPackages()
         Log.d(TAG, "Accessibility Service connected")
     }
 
@@ -621,22 +631,11 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * الحصول على كل النصوص في الشاشة
-     * يستمع مؤقتاً لآخر تطبيق فُتح لضمان قراءة نافذته
+     *
+     * ✅ بعد الإصلاح: packageNames = null دائماً عند غياب المهام،
+     * لذلك rootInActiveWindow يعمل مع أي تطبيق مفتوح بدون تلاعب إضافي.
      */
     fun getScreenText(): String {
-        // استمع لآخر تطبيق فُتح مؤقتاً حتى نستطيع قراءة نافذته
-        if (lastOpenedPackage.isNotEmpty()) {
-            val info = serviceInfo
-            if (info != null) {
-                val current = info.packageNames?.toList() ?: emptyList()
-                if (!current.contains(lastOpenedPackage)) {
-                    info.packageNames = (current + lastOpenedPackage).toTypedArray()
-                    serviceInfo = info
-                }
-            }
-        }
-        // انتظر حتى يُطبّق النظام التغييرات ويتحدث rootInActiveWindow
-        Thread.sleep(300)
         val rootNode = rootInActiveWindow ?: return ""
         val texts = mutableListOf<String>()
         collectTexts(rootNode, texts)
