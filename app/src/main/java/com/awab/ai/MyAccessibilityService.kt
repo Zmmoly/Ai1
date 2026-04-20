@@ -641,13 +641,18 @@ class MyAccessibilityService : AccessibilityService() {
 
         val texts = mutableListOf<String>()
 
-        // الطريقة الأولى: windows API — تتجاوز packageNames كلياً (API 21+)
+        // الطريقة الأولى: اقرأ النافذة النشطة في الأمام فقط (TYPE_APPLICATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             try {
-                windows?.forEach { win ->
-                    val root = win.root ?: return@forEach
-                    collectTexts(root, texts)
-                    root.recycle()
+                val activeWin = windows
+                    ?.filter { it.isActive && it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+                    ?.maxByOrNull { it.layer }
+                if (activeWin != null) {
+                    val root = activeWin.root
+                    if (root != null) {
+                        collectTexts(root, texts)
+                        root.recycle()
+                    }
                 }
             } catch (_: Exception) {}
         }
