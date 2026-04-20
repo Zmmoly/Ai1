@@ -145,8 +145,9 @@ object StepEngine {
             }
 
         // قائمة: "قائمة: نص1 | نص2 | نص3"
+        // ملاحظة: normalizeAll تحوّل ة → ه لذا نطابق "قائمه" بعد التطبيع
         Regex(
-            "^قائمة\\s*:\\s*(.+)$",
+            "^قائمه\\s*:\\s*(.+)$",
             RegexOption.IGNORE_CASE
         ).matchEntire(t)?.let { m ->
             val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
@@ -155,7 +156,7 @@ object StepEngine {
 
         // قائمة نصوص: "قائمة نصوص: نص1 | نص2 | نص3"
         Regex(
-            "^قائمة\\s+نصوص\\s*:\\s*(.+)$",
+            "^قائمه\\s+نصوص\\s*:\\s*(.+)$",
             RegexOption.IGNORE_CASE
         ).matchEntire(t)?.let { m ->
             val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
@@ -164,7 +165,7 @@ object StepEngine {
 
         // قائمة روابط: "قائمة روابط: https://... | https://..."
         Regex(
-            "^قائمة\\s+روابط\\s*:\\s*(.+)$",
+            "^قائمه\\s+روابط\\s*:\\s*(.+)$",
             RegexOption.IGNORE_CASE
         ).matchEntire(t)?.let { m ->
             val items = m.groupValues[1].split("|").map { it.trim() }.filter { it.isNotEmpty() }
