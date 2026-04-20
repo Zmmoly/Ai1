@@ -621,8 +621,20 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * الحصول على كل النصوص في الشاشة
+     * يستمع مؤقتاً لآخر تطبيق فُتح لضمان قراءة نافذته
      */
     fun getScreenText(): String {
+        // استمع لآخر تطبيق فُتح مؤقتاً حتى نستطيع قراءة نافذته
+        if (lastOpenedPackage.isNotEmpty()) {
+            val info = serviceInfo
+            if (info != null) {
+                val current = info.packageNames?.toList() ?: emptyList()
+                if (!current.contains(lastOpenedPackage)) {
+                    info.packageNames = (current + lastOpenedPackage).toTypedArray()
+                    serviceInfo = info
+                }
+            }
+        }
         val rootNode = rootInActiveWindow ?: return ""
         val texts = mutableListOf<String>()
         collectTexts(rootNode, texts)
