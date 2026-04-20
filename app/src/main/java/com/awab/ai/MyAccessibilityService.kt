@@ -680,6 +680,9 @@ class MyAccessibilityService : AccessibilityService() {
      * جمع النصوص من الشجرة
      */
     private fun collectTexts(node: AccessibilityNodeInfo, texts: MutableList<String>) {
+        // تجاهل العناصر غير المرئية للمستخدم (خارج الشاشة أو مخفية)
+        if (!node.isVisibleToUser) return
+
         val text = node.text?.toString()
         if (!text.isNullOrBlank()) {
             texts.add(text)
