@@ -625,48 +625,29 @@ class MyAccessibilityService : AccessibilityService() {
      * يفعّل الاستماع مؤقتاً قبل القراءة لضمان الحصول على snapshot حديث
      */
     fun getScreenText(): String {
-        // ── فعّل الاستماع مؤقتاً حتى يتحدث rootInActiveWindow و windows ──
+        // فعّل الاستماع مؤقتاً
         val info = serviceInfo
         val savedPackages = info?.packageNames?.copyOf()
         val savedEventTypes = info?.eventTypes ?: 0
         if (info != null) {
-            info.packageNames = null   // استمع لكل التطبيقات
+            info.packageNames = null
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                               AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             serviceInfo = info
         }
 
-        // انتظر لحظة قصيرة حتى يتحدث النظام الـ window tree
         Thread.sleep(150)
 
         val texts = mutableListOf<String>()
 
-        // الطريقة الأولى: اقرأ النافذة النشطة في الأمام فقط (TYPE_APPLICATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            try {
-                val activeWin = windows
-                    ?.filter { it.isActive && it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
-                    ?.maxByOrNull { it.layer }
-                if (activeWin != null) {
-                    val root = activeWin.root
-                    if (root != null) {
-                        collectTexts(root, texts)
-                        root.recycle()
-                    }
-                }
-            } catch (_: Exception) {}
+        // rootInActiveWindow = النافذة التي يتفاعل معها المستخدم — نافذة واحدة فقط
+        val rootNode = rootInActiveWindow
+        if (rootNode != null) {
+            collectTexts(rootNode, texts)
+            rootNode.recycle()
         }
 
-        // الطريقة الثانية: fallback — rootInActiveWindow
-        if (texts.isEmpty()) {
-            val rootNode = rootInActiveWindow
-            if (rootNode != null) {
-                collectTexts(rootNode, texts)
-                rootNode.recycle()
-            }
-        }
-
-        // ── أعد تعطيل الاستماع للحفاظ على البطارية ──
+        // أعد تعطيل الاستماع
         if (info != null) {
             info.packageNames = savedPackages
             info.eventTypes = savedEventTypes
@@ -677,26 +658,53 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * دالة تشخيصية — تطبع كل خصائص كل node في الشجرة
+     * استخدم: service.debugScreenTree() ثم اقرأ Logcat
+     */
+    fun debugScreenTree(): String {
+        val info = serviceInfo
+        if (info != null) {
+            info.packageNames = null
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                              AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            serviceInfo = info
+        }
+        Thread.sleep(150)
+        val root = rootInActiveWindow ?: return "لا يوجد root"
+        val sb = StringBuilder()
+        debugNode(root, sb, 0)
+        root.recycle()
+        return sb.toString()
+    }
+
+    private fun debugNode(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int) {
+        val indent = "  ".repeat(depth)
+        val cls = node.className?.toString()?.substringAfterLast(".") ?: "?"
+        val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
+        val visible = node.isVisibleToUser
+        val bounds = android.graphics.Rect()
+        node.getBoundsInScreen(bounds)
+        sb.appendLine("$indent[$cls] text=\"$text\" desc=\"$desc\" visible=$visible bounds=$bounds")
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            debugNode(child, sb, depth + 1)
+            child.recycle()
+        }
+    }
+
+    /**
      * جمع النصوص من الشجرة
      */
     private fun collectTexts(node: AccessibilityNodeInfo, texts: MutableList<String>) {
-        // تجاهل العناصر المخفية كلياً (مثل visibility=GONE)
-        // لكن لا نعتمد على isVisibleToUser وحده لأنه يحجب contentDescription في بعض التطبيقات
-
         val text = node.text?.toString()
-        if (!text.isNullOrBlank() && node.isVisibleToUser) {
+        if (!text.isNullOrBlank()) {
             texts.add(text)
         }
 
-        // contentDescription: نتحقق من أن العنصر داخل حدود الشاشة فعلاً
         val desc = node.contentDescription?.toString()
         if (!desc.isNullOrBlank() && desc != text) {
-            val bounds = android.graphics.Rect()
-            node.getBoundsInScreen(bounds)
-            // العنصر مرئي إذا كانت له مساحة حقيقية على الشاشة
-            if (!bounds.isEmpty && bounds.top >= 0 && bounds.width() > 0 && bounds.height() > 0) {
-                texts.add(desc)
-            }
+            texts.add(desc)
         }
 
         for (i in 0 until node.childCount) {
