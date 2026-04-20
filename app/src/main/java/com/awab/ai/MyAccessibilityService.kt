@@ -680,18 +680,23 @@ class MyAccessibilityService : AccessibilityService() {
      * جمع النصوص من الشجرة
      */
     private fun collectTexts(node: AccessibilityNodeInfo, texts: MutableList<String>) {
-        // تجاهل العناصر غير المرئية للمستخدم (خارج الشاشة أو مخفية)
-        if (!node.isVisibleToUser) return
+        // تجاهل العناصر المخفية كلياً (مثل visibility=GONE)
+        // لكن لا نعتمد على isVisibleToUser وحده لأنه يحجب contentDescription في بعض التطبيقات
 
         val text = node.text?.toString()
-        if (!text.isNullOrBlank()) {
+        if (!text.isNullOrBlank() && node.isVisibleToUser) {
             texts.add(text)
         }
 
-        // بعض التطبيقات (كتيليجرام) تضع أسماء المجموعات في contentDescription بدلاً من text
+        // contentDescription: نتحقق من أن العنصر داخل حدود الشاشة فعلاً
         val desc = node.contentDescription?.toString()
         if (!desc.isNullOrBlank() && desc != text) {
-            texts.add(desc)
+            val bounds = android.graphics.Rect()
+            node.getBoundsInScreen(bounds)
+            // العنصر مرئي إذا كانت له مساحة حقيقية على الشاشة
+            if (!bounds.isEmpty && bounds.top >= 0 && bounds.width() > 0 && bounds.height() > 0) {
+                texts.add(desc)
+            }
         }
 
         for (i in 0 until node.childCount) {
