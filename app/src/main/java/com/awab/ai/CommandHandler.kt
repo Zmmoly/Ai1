@@ -249,6 +249,36 @@ class CommandHandler(private val context: Context) {
                 val query = message.removePrefix("ابحث عن ").removePrefix("هل يوجد ").trim()
                 searchInScreen(query)
             }
+            // ── اضغط على [عنصر] واكتب [نص] ──
+            (lowerMessage.startsWith("اضغط") || lowerMessage.startsWith("انقر")) &&
+            (lowerMessage.contains(" واكتب ") || lowerMessage.contains(" وأكتب ")) -> {
+                val parts = message.split(Regex("واكتب|وأكتب"), limit = 2)
+                val targetRaw = parts[0]
+                    .removePrefix("اضغط على").removePrefix("اضغط علي")
+                    .removePrefix("انقر على").removePrefix("انقر علي")
+                    .removePrefix("اضغط").removePrefix("انقر").trim()
+                val textToType = parts.getOrNull(1)?.trim() ?: ""
+                val clickResult = if (targetRaw.isBlank()) {
+                    // اضغط أول حقل نص واكتب
+                    clickFirstByClass("EditText")
+                } else {
+                    clickOnText(targetRaw)
+                }
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    typeText(textToType)
+                }, 600)
+                "$clickResult\n✏️ كتابة: $textToType"
+            }
+            // ── اضغط اكتب [نص] ← اضغط أول حقل نص ثم اكتب ──
+            lowerMessage.startsWith("اضغط اكتب ") || lowerMessage.startsWith("انقر اكتب ") -> {
+                val text = message
+                    .removePrefix("اضغط اكتب ").removePrefix("انقر اكتب ").trim()
+                val clickResult = clickFirstByClass("EditText")
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    typeText(text)
+                }, 600)
+                "$clickResult\n✏️ كتابة: $text"
+            }
             // ── كتابة نص في الحقل النشط ──
             lowerMessage.startsWith("اكتب ") || lowerMessage.startsWith("كتب ") ||
             lowerMessage.startsWith("write ") || lowerMessage.startsWith("type ") -> {
@@ -259,8 +289,11 @@ class CommandHandler(private val context: Context) {
             }
 
             // الضغط على عنصر بالنص
-            lowerMessage.startsWith("اضغط علي") || lowerMessage.startsWith("انقر علي") -> {
-                val text = message.substringAfter("اضغط على").substringAfter("انقر على").trim()
+            lowerMessage.startsWith("اضغط علي") || lowerMessage.startsWith("انقر علي") ||
+            lowerMessage.startsWith("اضغط على") || lowerMessage.startsWith("انقر على") -> {
+                val text = message
+                    .removePrefix("اضغط على").removePrefix("اضغط علي")
+                    .removePrefix("انقر على").removePrefix("انقر علي").trim()
                 clickOnText(text)
             }
 
