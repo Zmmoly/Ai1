@@ -269,16 +269,8 @@ class CommandHandler(private val context: Context) {
                 }, 600)
                 "$clickResult\n✏️ كتابة: $textToType"
             }
-            // ── اضغط اكتب [نص] ← اضغط أول حقل نص ثم اكتب ──
-            lowerMessage.startsWith("اضغط اكتب ") || lowerMessage.startsWith("انقر اكتب ") -> {
-                val text = message
-                    .removePrefix("اضغط اكتب ").removePrefix("انقر اكتب ").trim()
-                val clickResult = clickFirstByClass("EditText")
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    typeText(text)
-                }, 600)
-                "$clickResult\n✏️ كتابة: $text"
-            }
+            // ── اضغط اكتب [نص] ← يضغط على عنصر نصه "اكتب [نص]" ──
+            // ملاحظة: اضغط علي اكتب شيئا = ابحث عن عنصر نصه "اكتب شيئا" واضغط عليه
             // ── كتابة نص في الحقل النشط ──
             lowerMessage.startsWith("اكتب ") || lowerMessage.startsWith("كتب ") ||
             lowerMessage.startsWith("write ") || lowerMessage.startsWith("type ") -> {
