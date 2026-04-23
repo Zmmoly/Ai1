@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
+import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -31,6 +32,11 @@ class MainActivity : AppCompatActivity() {
     private var isRecording = false
     private val RECORD_AUDIO_PERMISSION_CODE = 200
     private val CUSTOM_COMMANDS_REQUEST_CODE = 300
+
+    // ── إيقاف الأمر المخصص ──
+    @Volatile private var isCommandCancelled = false
+    private var overlayStopButton: TextView? = null
+    private var overlayWindowManager: WindowManager? = null
 
     // مستقبل البث من الخدمة الخلفية
     private val recordingReceiver = object : BroadcastReceiver() {
@@ -702,9 +708,15 @@ class MainActivity : AppCompatActivity() {
         if (stepIndex == 0) {
             val steps = CustomCommandsManager.parseStepsToStepList(cmd.steps)
             val delayMs = cmd.delaySeconds * 1000L
+            isCommandCancelled = false
             addBotMessage("⚡ تنفيذ \"${cmd.name}\" — ${steps.size} خطوة(خطوات)...")
+            showOverlayStopButton()
             executeStepList(steps, delayMs) {
-                addBotMessage("✅ تم تنفيذ \"${cmd.name}\" بالكامل!")
+                hideOverlayStopButton()
+                if (!isCommandCancelled)
+                    addBotMessage("✅ تم تنفيذ \"${cmd.name}\" بالكامل!")
+                else
+                    addBotMessage("🛑 تم إيقاف \"${cmd.name}\"")
             }
             return
         }
@@ -984,8 +996,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun executeStepList(steps: List<Step>, delayMs: Long, onDone: () -> Unit) {
         fun next(i: Int) {
+            if (isCommandCancelled) { onDone(); return }
             if (i >= steps.size) { onDone(); return }
             executeStep(steps[i], delayMs) {
+                if (isCommandCancelled) { onDone(); return@executeStep }
                 android.os.Handler(mainLooper).postDelayed({ next(i + 1) }, delayMs)
             }
         }
@@ -998,6 +1012,7 @@ class MainActivity : AppCompatActivity() {
     private fun executeLoopBody(
         body: List<Step>, total: Int, current: Int, delayMs: Long, onDone: () -> Unit
     ) {
+        if (isCommandCancelled) { onDone(); return }
         if (current >= total) {
             addBotMessage("✅ انتهت الحلقة ($total مرات)")
             onDone()
@@ -1005,6 +1020,7 @@ class MainActivity : AppCompatActivity() {
         }
         addBotMessage("🔁 تكرار ${current + 1}/$total")
         executeStepList(body, delayMs) {
+            if (isCommandCancelled) { onDone(); return@executeStepList }
             android.os.Handler(mainLooper).postDelayed({
                 executeLoopBody(body, total, current + 1, delayMs, onDone)
             }, delayMs)
@@ -1057,8 +1073,97 @@ class MainActivity : AppCompatActivity() {
         inputField.hint = "اكتب رسالتك هنا..."
     }
 
+    // ── الزر الغائم فوق كل التطبيقات ─────────────────────────────────
+
+    private fun showOverlayStopButton() {
+        hideOverlayStopButton()
+
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+            return
+        }
+
+        overlayWindowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+        overlayStopButton = TextView(this).apply {
+            text = "⏹ إيقاف"
+            textSize = 16f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(0xFFFFFFFF.toInt())
+            setPadding(52, 30, 52, 30)
+            gravity = Gravity.CENTER
+
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 100f
+                setColor(0xFFCC0000.toInt())
+                setStroke(4, 0xFFFF6666.toInt())
+            }
+            elevation = 30f
+
+            setOnClickListener {
+                isCommandCancelled = true
+                hideOverlayStopButton()
+                // أرجع للتطبيق وأظهر رسالة
+                val i = Intent(this@MainActivity, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    putExtra("cancelled", true)
+                }
+                startActivity(i)
+            }
+        }
+
+        val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            android.graphics.PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = 200
+        }
+
+        overlayWindowManager?.addView(overlayStopButton, params)
+
+        // نبضة
+        val anim = android.animation.ObjectAnimator.ofFloat(overlayStopButton, "scaleX", 1f, 1.1f, 1f).apply {
+            duration = 800; repeatCount = android.animation.ValueAnimator.INFINITE
+        }
+        val animY = android.animation.ObjectAnimator.ofFloat(overlayStopButton, "scaleY", 1f, 1.1f, 1f).apply {
+            duration = 800; repeatCount = android.animation.ValueAnimator.INFINITE
+        }
+        android.animation.AnimatorSet().apply { playTogether(anim, animY); start() }
+    }
+
+    private fun hideOverlayStopButton() {
+        overlayStopButton?.let {
+            try { overlayWindowManager?.removeView(it) } catch (e: Exception) { }
+            overlayStopButton = null
+            overlayWindowManager = null
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+
     override fun onResume() {
         super.onResume()
+        // تحقق إذا رجعنا بعد إيقاف الأمر
+        if (intent.getBooleanExtra("cancelled", false)) {
+            addBotMessage("🛑 تم إيقاف الأمر المخصص!")
+            intent.removeExtra("cancelled")
+        }
         setupAppTriggers()
     }
 
@@ -1088,6 +1193,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         try { unregisterReceiver(recordingReceiver) } catch (e: Exception) { /* تجاهل */ }
         MyAccessibilityService.getInstance()?.onAppOpened = null
+        hideOverlayStopButton()
         // الخدمة تبقى تعمل في الخلفية حتى يضغط المستخدم إيقاف
     }
 }
