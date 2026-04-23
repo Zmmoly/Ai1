@@ -842,6 +842,7 @@ class MainActivity : AppCompatActivity() {
         delayMs: Long,
         onDone: () -> Unit
     ) {
+        if (isCommandCancelled) { onDone(); return }
         if (current >= items.size) {
             addBotMessage("✅ انتهت القائمة (${items.size} عنصر)")
             onDone()
@@ -859,11 +860,13 @@ class MainActivity : AppCompatActivity() {
         addBotMessage(actionResult)
 
         android.os.Handler(mainLooper).postDelayed({
+            if (isCommandCancelled) { onDone(); return@postDelayed }
             if (bodySteps.isNotEmpty()) {
                 // استبدل كلمة "عنصر" بالنص الحالي في كل الخطوات
                 val resolvedSteps = bodySteps.map { step -> replaceItemInStep(step, item) }
                 // نفّذ الخطوات على هذا العنصر ثم انتقل للتالي
                 executeStepList(resolvedSteps, delayMs) {
+                    if (isCommandCancelled) { onDone(); return@executeStepList }
                     android.os.Handler(mainLooper).postDelayed({
                         executeItemList(items, isUrl, bodySteps, current + 1, delayMs, onDone)
                     }, delayMs)
@@ -884,6 +887,7 @@ class MainActivity : AppCompatActivity() {
         delayMs: Long,
         onDone: () -> Unit
     ) {
+        if (isCommandCancelled) { onDone(); return }
         if (current >= items.size) {
             addBotMessage("✅ انتهت القائمة (${items.size} عنصر)")
             onDone()
@@ -896,8 +900,10 @@ class MainActivity : AppCompatActivity() {
         val resolvedSteps = bodySteps.map { step -> replaceItemInStep(step, item) }
 
         android.os.Handler(mainLooper).postDelayed({
+            if (isCommandCancelled) { onDone(); return@postDelayed }
             if (resolvedSteps.isNotEmpty()) {
                 executeStepList(resolvedSteps, delayMs) {
+                    if (isCommandCancelled) { onDone(); return@executeStepList }
                     android.os.Handler(mainLooper).postDelayed({
                         executeForEach(items, bodySteps, current + 1, delayMs, onDone)
                     }, delayMs)
