@@ -785,13 +785,19 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * الضغط على إحداثيات معينة
+     * الضغط على إحداثيات معينة مع إزاحة عشوائية خفيفة لتجنب الضغط على نفس البكسل
      */
     fun performClick(x: Float, y: Float): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
 
+        // إزاحة عشوائية بين -3 و +3 بكسل لمحاكاة النقر البشري الطبيعي
+        val jitter = 3
+        val rng = java.util.Random()
+        val finalX = x + (rng.nextInt(jitter * 2 + 1) - jitter)
+        val finalY = y + (rng.nextInt(jitter * 2 + 1) - jitter)
+
         val path = Path().apply {
-            moveTo(x, y)
+            moveTo(finalX, finalY)
         }
 
         val gestureBuilder = GestureDescription.Builder()
