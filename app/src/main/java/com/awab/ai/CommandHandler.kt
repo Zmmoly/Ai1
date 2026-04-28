@@ -976,15 +976,22 @@ class CommandHandler(private val context: Context) {
         return "✅ جاري البحث عن العنصر [$id] والضغط عليه"
     }
 
-    /** اضغط على إحداثيات محددة */
+    /** اضغط على إحداثيات محددة مع إزاحة عشوائية خفيفة لتجنب الضغط على نفس البكسل */
     private fun clickAtPosition(x: Int, y: Int): String {
         val service = MyAccessibilityService.getInstance()
             ?: return "⚠️ يجب تفعيل خدمة إمكانية الوصول"
 
+        // إزاحة عشوائية بين -4 و +4 بكسل في كل اتجاه
+        val jitterRange = 4
+        val jitterX = (java.util.Random().nextInt(jitterRange * 2 + 1) - jitterRange)
+        val jitterY = (java.util.Random().nextInt(jitterRange * 2 + 1) - jitterRange)
+        val finalX = (x + jitterX).toFloat()
+        val finalY = (y + jitterY).toFloat()
+
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            service.performClick(x.toFloat(), y.toFloat())
+            service.performClick(finalX, finalY)
         }
-        return "✅ ضغطت على الموقع ($x, $y)"
+        return "✅ ضغطت على الموقع ($x, $y) ← بعد الإزاحة: (${finalX.toInt()}, ${finalY.toInt()})"
     }
 
     /** اضغط على عنصر بالـ ContentDescription (وصف الأيقونة) */
