@@ -707,6 +707,12 @@ class MyAccessibilityService : AccessibilityService() {
             texts.add(desc)
         }
 
+        // hintText — النص التلميحي مثل "اكتب شيئًا..." في Facebook
+        val hint = node.hintText?.toString()
+        if (!hint.isNullOrBlank() && hint != text && hint != desc) {
+            texts.add(hint)
+        }
+
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectTexts(child, texts)
