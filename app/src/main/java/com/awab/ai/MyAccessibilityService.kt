@@ -361,8 +361,17 @@ class MyAccessibilityService : AccessibilityService() {
      * البحث عن عنصر بالنص
      */
     private fun findNodeByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
-        // البحث في العقدة الحالية
-        if (node.text?.toString()?.contains(text, ignoreCase = true) == true) {
+        // تطبيع نص البحث مرة واحدة
+        val normalizedTarget = text.normalizeAll().lowercase().trim()
+
+        // البحث في العقدة الحالية (text + hintText + contentDescription) مع تطبيع الجانبين
+        val nodeText = node.text?.toString()?.normalizeAll()?.lowercase() ?: ""
+        val nodeHint = node.hintText?.toString()?.normalizeAll()?.lowercase() ?: ""
+        val nodeDesc = node.contentDescription?.toString()?.normalizeAll()?.lowercase() ?: ""
+
+        if (nodeText.contains(normalizedTarget) ||
+            nodeHint.contains(normalizedTarget) ||
+            nodeDesc.contains(normalizedTarget)) {
             return node
         }
 
