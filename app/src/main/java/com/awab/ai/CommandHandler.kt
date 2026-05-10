@@ -246,7 +246,12 @@ class CommandHandler(private val context: Context) {
 
             // ── البحث عن نص في الشاشة ──
             lowerMessage.startsWith("ابحث عن ") || lowerMessage.startsWith("هل يوجد ") -> {
-                val query = message.removePrefix("ابحث عن ").removePrefix("هل يوجد ").trim()
+                // نستخرج query من rawMessage الأصلي (قبل التطبيع) للحفاظ على التنوين والهمزات
+                val prefixLen = when {
+                    lowerMessage.startsWith("ابحث عن ") -> "ابحث عن ".length
+                    else -> "هل يوجد ".length
+                }
+                val query = rawMessage.drop(prefixLen).trim()
                 searchInScreen(query)
             }
             // ── اضغط على [عنصر] واكتب [نص] ──
@@ -912,10 +917,15 @@ class CommandHandler(private val context: Context) {
         val screenText = service.getScreenText()
         if (screenText.isBlank()) return "⚠️ لا يوجد نص في الشاشة الحالية"
 
+        // تطبيع نص الاستعلام حتى لو وصل مسبقاً مطبّعاً
+        val normalizedQuery = query.normalizeAll().lowercase()
+
         val lines = screenText.lines()
-        val matches = lines.filter { it.contains(query, ignoreCase = true) }
+        // نطبّع كل سطر من الشاشة أيضاً عند المقارنة حتى يتطابق مع الاستعلام المطبَّع
+        val matches = lines.filter { it.normalizeAll().lowercase().contains(normalizedQuery, ignoreCase = false) }
 
         return if (matches.isNotEmpty()) {
+            // نعرض النص الأصلي (غير المطبَّع) للمستخدم
             val result = matches.joinToString("\n• ", prefix = "• ")
             "✅ وجدت \"$query\" في الشاشة (${matches.size} نتيجة):\n\n$result"
         } else {
